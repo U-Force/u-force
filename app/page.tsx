@@ -36,7 +36,7 @@ export default function Home() {
       <main style={mainContainer}>
         <header style={header}>
           <div style={titleContainer}>
-            <div style={reactorIcon}>⚛</div>
+            <img src="/logo.png" alt="U-FORCE Logo" style={reactorIcon} />
             <div>
               <h1 style={title}>U‑FORCE</h1>
               <div style={subtitle}>REACTOR TRAINING SIMULATOR</div>
@@ -124,8 +124,8 @@ const gridOverlay: React.CSSProperties = {
   right: 0,
   bottom: 0,
   backgroundImage: `
-    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px)
+    linear-gradient(rgba(255, 153, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 153, 0, 0.03) 1px, transparent 1px)
   `,
   backgroundSize: "50px 50px",
   pointerEvents: "none",
@@ -139,8 +139,8 @@ const statusBar: React.CSSProperties = {
   gap: "32px",
   padding: "12px 48px",
   background: "rgba(0, 0, 0, 0.6)",
-  borderBottom: "2px solid #00ffff",
-  boxShadow: "0 0 20px rgba(0, 255, 255, 0.3)",
+  borderBottom: "2px solid #ff9900",
+  boxShadow: "0 0 20px rgba(255, 153, 0, 0.3)",
 };
 
 const statusItem: React.CSSProperties = {
@@ -151,7 +151,7 @@ const statusItem: React.CSSProperties = {
 
 const statusLabel: React.CSSProperties = {
   fontSize: "9px",
-  color: "#00ffff",
+  color: "#ff9900",
   letterSpacing: "1px",
   fontWeight: "bold",
 };
@@ -183,9 +183,9 @@ const titleContainer: React.CSSProperties = {
 };
 
 const reactorIcon: React.CSSProperties = {
-  fontSize: "64px",
-  color: "#00ffff",
-  textShadow: "0 0 20px rgba(0, 255, 255, 0.8)",
+  width: "64px",
+  height: "64px",
+  filter: "brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%) drop-shadow(0 0 20px rgba(255, 153, 0, 0.8))",
   animation: "pulse 2s infinite",
 };
 
@@ -193,9 +193,9 @@ const title: React.CSSProperties = {
   fontSize: "56px",
   margin: "0",
   fontWeight: "bold",
-  color: "#00ffff",
+  color: "#ff9900",
   letterSpacing: "4px",
-  textShadow: "0 0 10px rgba(0, 255, 255, 0.5)",
+  textShadow: "0 0 10px rgba(255, 153, 0, 0.5)",
 };
 
 const subtitle: React.CSSProperties = {
@@ -236,7 +236,7 @@ const panelIndicator: React.CSSProperties = {
 const panelTitle: React.CSSProperties = {
   fontSize: "12px",
   letterSpacing: "2px",
-  color: "#00ffff",
+  color: "#ff9900",
   fontWeight: "bold",
 };
 
@@ -253,12 +253,12 @@ const launchButton: React.CSSProperties = {
   alignItems: "center",
   gap: "16px",
   padding: "20px 24px",
-  background: "linear-gradient(135deg, #003d3d 0%, #005555 100%)",
-  border: "2px solid #00ffff",
+  background: "linear-gradient(135deg, #3d2200 0%, #554400 100%)",
+  border: "2px solid #ff9900",
   borderRadius: "4px",
   textDecoration: "none",
-  color: "#00ffff",
-  boxShadow: "0 0 20px rgba(0, 255, 255, 0.2), inset 0 0 20px rgba(0, 255, 255, 0.05)",
+  color: "#ff9900",
+  boxShadow: "0 0 20px rgba(255, 153, 0, 0.2), inset 0 0 20px rgba(255, 153, 0, 0.05)",
   transition: "all 0.3s ease",
   cursor: "pointer",
 };
@@ -348,7 +348,7 @@ const checkboxUnchecked: React.CSSProperties = {
 const objectiveTitle: React.CSSProperties = {
   fontSize: "15px",
   fontWeight: "bold",
-  color: "#00ffff",
+  color: "#ff9900",
   marginBottom: "4px",
 };
 
