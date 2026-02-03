@@ -63,11 +63,11 @@ export default function ScenarioDebrief({
         <div style={statsGrid}>
           <div style={statCard}>
             <div style={statLabel}>Duration</div>
-            <div style={statValue}>{formatDuration(metrics.duration)}</div>
+            <div style={statValue()}>{formatDuration(metrics.duration)}</div>
           </div>
           <div style={statCard}>
             <div style={statLabel}>Final Power</div>
-            <div style={statValue}>{(metrics.finalPower * 100).toFixed(1)}%</div>
+            <div style={statValue()}>{(metrics.finalPower * 100).toFixed(1)}%</div>
           </div>
           <div style={statCard}>
             <div style={statLabel}>Trips/SCRAMs</div>
@@ -83,11 +83,11 @@ export default function ScenarioDebrief({
           </div>
           <div style={statCard}>
             <div style={statLabel}>Final Fuel Temp</div>
-            <div style={statValue}>{metrics.finalFuelTemp.toFixed(0)} K</div>
+            <div style={statValue()}>{metrics.finalFuelTemp.toFixed(0)} K</div>
           </div>
           <div style={statCard}>
             <div style={statLabel}>Final Coolant Temp</div>
-            <div style={statValue}>{metrics.finalCoolantTemp.toFixed(0)} K</div>
+            <div style={statValue()}>{metrics.finalCoolantTemp.toFixed(0)} K</div>
           </div>
         </div>
       </div>
@@ -168,7 +168,9 @@ export default function ScenarioDebrief({
 const container: React.CSSProperties = {
   maxWidth: '900px',
   margin: '0 auto',
+  marginLeft: '340px', // Account for sidebar (320px + 20px spacing)
   padding: '32px 24px',
+  paddingTop: '92px', // Account for 60px nav bar + 32px spacing
 };
 
 const header: React.CSSProperties = {

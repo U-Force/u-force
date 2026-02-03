@@ -50,10 +50,11 @@ export const LAMBDA_I: readonly number[] = [
 
 /**
  * Prompt neutron generation time (Λ).
- * Typical value for a thermal reactor with water moderator.
+ * Increased from realistic 1e-4 to 1e-3 for human-scale response times.
+ * This makes the reactor respond ~10x slower, giving operators time to react.
  * Units: [s]
  */
-export const LAMBDA_PROMPT: number = 1e-4; // 0.1 ms, typical for thermal PWR
+export const LAMBDA_PROMPT: number = 1e-3; // 1 ms, slow enough for human reaction
 
 // ============================================================================
 // REACTIVITY FEEDBACK COEFFICIENTS
@@ -62,33 +63,32 @@ export const LAMBDA_PROMPT: number = 1e-4; // 0.1 ms, typical for thermal PWR
 /**
  * Fuel temperature (Doppler) reactivity coefficient (α_f).
  * Negative coefficient provides inherent safety (negative feedback).
- * Typical range: -2 to -5 pcm/K for UO2 fuel.
+ * Strengthened to -4 pcm/K for better stability in simulation.
  * Units: [Δk/k per K] or [1/K]
  */
-export const ALPHA_FUEL: number = -2.5e-5; // -2.5 pcm/K
+export const ALPHA_FUEL: number = -4.0e-5; // -4 pcm/K (stronger Doppler feedback)
 
 /**
  * Moderator (coolant) temperature reactivity coefficient (α_c).
  * Negative in most PWR designs (provides negative feedback).
- * Can be slightly positive at BOL with high boron concentration.
- * Typical range: -5 to -50 pcm/K.
+ * Strengthened to -25 pcm/K for better stability in simulation.
  * Units: [Δk/k per K] or [1/K]
  */
-export const ALPHA_COOLANT: number = -1.5e-4; // -15 pcm/K
+export const ALPHA_COOLANT: number = -2.5e-4; // -25 pcm/K (stronger moderator feedback)
 
 /**
  * Reference fuel temperature for reactivity feedback calculation.
- * Nominal steady-state fuel temperature at full power.
+ * Set to cold shutdown to prevent huge positive reactivity at startup.
  * Units: [K]
  */
-export const TF_REFERENCE: number = 900; // ~627°C
+export const TF_REFERENCE: number = 300; // Cold shutdown (27°C)
 
 /**
  * Reference coolant temperature for reactivity feedback calculation.
- * Nominal steady-state coolant temperature at full power.
+ * Set to cold shutdown to prevent huge positive reactivity at startup.
  * Units: [K]
  */
-export const TC_REFERENCE: number = 580; // ~307°C
+export const TC_REFERENCE: number = 300; // Cold shutdown (27°C)
 
 // ============================================================================
 // CONTROL ROD PARAMETERS
@@ -97,10 +97,10 @@ export const TC_REFERENCE: number = 580; // ~307°C
 /**
  * Maximum control rod worth (fully withdrawn vs fully inserted).
  * This is the total reactivity change available from rods.
- * Typical value for PWR: 5000-10000 pcm total rod worth.
+ * Reduced from 5000 to 3000 pcm for more controllable operation.
  * Units: [Δk/k]
  */
-export const ROD_WORTH_MAX: number = 0.05; // 5000 pcm total worth
+export const ROD_WORTH_MAX: number = 0.03; // 3000 pcm total worth (more controllable)
 
 /**
  * Rod worth curve coefficients.
@@ -136,17 +136,18 @@ export const SCRAM_TAU: number = 1.0;
 
 /**
  * Effective fuel mass (lumped parameter).
- * Represents total UO2 fuel inventory participating in heat transfer.
+ * Reduced from 80,000 to 15,000 kg for faster thermal response in simulation.
+ * Makes temperature feedback kick in more quickly.
  * Units: [kg]
  */
-export const MASS_FUEL: number = 80000; // 80 tonnes typical for PWR core
+export const MASS_FUEL: number = 15000; // 15 tonnes (reduced for faster response)
 
 /**
  * Effective coolant mass in core.
- * Primary coolant volume in active core region.
+ * Reduced from 25,000 to 8,000 kg for faster thermal response.
  * Units: [kg]
  */
-export const MASS_COOLANT: number = 25000; // 25 tonnes
+export const MASS_COOLANT: number = 8000; // 8 tonnes (reduced for faster response)
 
 /**
  * Fuel specific heat capacity.
@@ -173,9 +174,10 @@ export const H_FUEL_COOLANT: number = 2.5e7; // 25 MW/K
  * Coolant-to-ultimate-heat-sink heat transfer coefficient × area.
  * Represents heat removal by steam generators / heat exchangers.
  * WITH pump running (forced circulation).
+ * Increased to 60 MW/K for better heat removal.
  * Units: [W/K]
  */
-export const H_COOLANT_SINK_PUMP_ON: number = 3.0e7; // 30 MW/K
+export const H_COOLANT_SINK_PUMP_ON: number = 6.0e7; // 60 MW/K (doubled for better cooling)
 
 /**
  * Coolant-to-ultimate-heat-sink heat transfer coefficient × area.
@@ -183,14 +185,14 @@ export const H_COOLANT_SINK_PUMP_ON: number = 3.0e7; // 30 MW/K
  * Significantly reduced due to lower flow rates.
  * Units: [W/K]
  */
-export const H_COOLANT_SINK_PUMP_OFF: number = 5.0e6; // 5 MW/K (natural circ)
+export const H_COOLANT_SINK_PUMP_OFF: number = 1.0e7; // 10 MW/K (natural circ)
 
 /**
  * Coolant inlet temperature (from steam generator cold leg).
- * Assumed constant (simplified model).
+ * Set low for cold shutdown operation to enable effective cooling.
  * Units: [K]
  */
-export const TC_INLET: number = 565; // ~292°C
+export const TC_INLET: number = 300; // 27°C (cold shutdown inlet)
 
 /**
  * Nominal thermal power output.

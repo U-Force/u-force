@@ -3,12 +3,12 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   ReactorModel,
-  createCriticalSteadyState,
   DEFAULT_PARAMS,
   type ControlInputs,
   type ReactorState,
   type ReactivityComponents,
 } from "../lib/reactor";
+import NavigationBar from "../components/NavigationBar";
 
 const DT = 0.01; // 10ms timestep for smooth simulation
 const HISTORY_LENGTH = 500; // 5 seconds of history at 100 samples/s
@@ -23,10 +23,11 @@ interface HistoryPoint {
 
 export default function SimulatorPage() {
   // Control states
-  const [rod, setRod] = useState(1);
+  const [rod, setRod] = useState(0.05);
   const [pumpOn, setPumpOn] = useState(true);
   const [scram, setScram] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(0.5); // Start at 0.5x speed - balanced pace
+  const [learningMode, setLearningMode] = useState(false); // Learning hints toggle
 
   // Simulation states
   const [isRunning, setIsRunning] = useState(false);
@@ -44,50 +45,73 @@ export default function SimulatorPage() {
   const lastTimeRef = useRef<number>(0);
   const accumulatedRef = useRef<number>(0);
 
+  // Refs for real-time controls (avoid stale closures)
+  const rodRef = useRef(rod);
+  const pumpRef = useRef(pumpOn);
+  const scramRef = useRef(scram);
+
+  // Keep refs in sync with state
+  useEffect(() => { rodRef.current = rod; }, [rod]);
+  useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
+  useEffect(() => { scramRef.current = scram; }, [scram]);
+
   // Initialize model
   const initializeModel = useCallback(() => {
     try {
       setInitError(null);
 
-      // Simple initial state - shutdown condition
-      const initialState: ReactorState = {
+      // Start in TRUE COLD SHUTDOWN - subcritical, stable, low power
+      // This matches what operators expect: reactor is OFF until you withdraw rods
+      const initialPower = 1e-8; // Essentially zero power (shutdown)
+      const coldTemp = 300; // Cold shutdown temperature (K)
+
+      // Calculate equilibrium precursor concentrations for this tiny power
+      // C_i = (beta_i / lambda_i) * (P / Lambda) in equilibrium
+      const beta = [0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]; // Delayed neutron fractions
+      const lambda = [0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01]; // Decay constants (1/s)
+      const Lambda = 1e-3; // Prompt neutron lifetime (s) - MUST MATCH params.ts LAMBDA_PROMPT
+
+      const precursors = beta.map((b, i) => (b / lambda[i]) * (initialPower / Lambda));
+
+      const shutdownState: ReactorState = {
         t: 0,
-        P: 0.0001,  // Near zero power (shutdown)
-        Tf: 500,  // Cool fuel temperature in K
-        Tc: 500,  // Cool coolant temperature in K
-        C: [0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001],  // Very small precursors (shutdown)
+        P: initialPower,
+        Tf: coldTemp,
+        Tc: coldTemp,
+        C: precursors,
       };
 
-      modelRef.current = new ReactorModel(initialState, DEFAULT_PARAMS);
-      setState(initialState);
-      setRod(0.05);  // Start with rods mostly inserted (subcritical)
+      modelRef.current = new ReactorModel(shutdownState, DEFAULT_PARAMS);
+      setState(shutdownState);
+
+      // Start with rods fully inserted (0%) - truly shutdown state
+      const initialRod = 0.0;
+      setRod(initialRod);
+      rodRef.current = initialRod;
+
       setScram(false);
+      scramRef.current = false;
       setPumpOn(true);
+      pumpRef.current = true;
       setTripActive(false);
       setTripReason(null);
       setHistory([{
         t: 0,
-        P: initialState.P,
-        Tf: initialState.Tf,
-        Tc: initialState.Tc,
+        P: initialPower,
+        Tf: coldTemp,
+        Tc: coldTemp,
         rho: 0,
       }]);
 
-      // Compute initial reactivity
-      const controls: ControlInputs = { rod: 0.05, pumpOn: true, scram: false };
+      // Compute initial reactivity (should be negative - subcritical)
+      const controls: ControlInputs = { rod: initialRod, pumpOn: true, scram: false };
       const rho = modelRef.current.getReactivity(controls);
       setReactivity(rho);
+
+      console.log(`Initialized in cold shutdown: P=${initialPower}, T=${coldTemp}K, rod=${initialRod*100}%, rho=${(rho.rhoTotal*1e5).toFixed(0)} pcm`);
     } catch (error) {
       console.error("Initialization error:", error);
       setInitError(error instanceof Error ? error.message : "Failed to initialize reactor model");
-      // Set default fallback state
-      setState({
-        t: 0,
-        P: 0.0001,
-        Tf: 500,
-        Tc: 500,
-        C: [0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001],
-      });
     }
   }, []);
 
@@ -117,7 +141,14 @@ export default function SimulatorPage() {
 
   // Animation loop
   const tick = useCallback((timestamp: number) => {
-    if (!modelRef.current || isPaused) {
+    if (!modelRef.current) {
+      animationRef.current = requestAnimationFrame(tick);
+      return;
+    }
+
+    // PAUSE: Don't update simulation, but keep loop running for responsiveness
+    if (isPaused) {
+      lastTimeRef.current = 0; // Reset time on unpause
       animationRef.current = requestAnimationFrame(tick);
       return;
     }
@@ -137,8 +168,13 @@ export default function SimulatorPage() {
     const stepsNeeded = Math.floor(accumulatedRef.current / DT);
     accumulatedRef.current -= stepsNeeded * DT;
 
-    let currentScram = scram;
-    const controls: ControlInputs = { rod, pumpOn, scram: currentScram };
+    // Use refs for real-time control values
+    let currentScram = scramRef.current;
+    const controls: ControlInputs = {
+      rod: rodRef.current,
+      pumpOn: pumpRef.current,
+      scram: currentScram
+    };
 
     try {
       for (let i = 0; i < stepsNeeded; i++) {
@@ -151,6 +187,9 @@ export default function SimulatorPage() {
             setTripActive(true);
             setTripReason(reason);
             setScram(true);
+            scramRef.current = true;
+            setRod(0); // Auto-trip: Insert all rods
+            rodRef.current = 0;
             currentScram = true;
           }
         }
@@ -160,12 +199,15 @@ export default function SimulatorPage() {
       setTripActive(true);
       setTripReason("SIMULATION ERROR");
       setScram(true);
+      scramRef.current = true;
+      setRod(0); // Error: Insert all rods
+      rodRef.current = 0;
       handleStop();
       return;
     }
 
     const currentState = modelRef.current.getState();
-    const currentReactivity = modelRef.current.getReactivity({ rod, pumpOn, scram: currentScram });
+    const currentReactivity = modelRef.current.getReactivity(controls);
 
     setState(currentState);
     setReactivity(currentReactivity);
@@ -184,7 +226,7 @@ export default function SimulatorPage() {
     });
 
     animationRef.current = requestAnimationFrame(tick);
-  }, [isPaused, speed, rod, pumpOn, scram, tripActive, checkTrips]);
+  }, [isPaused, speed, tripActive, checkTrips]);
 
   // Start/Stop handlers
   const handleStart = () => {
@@ -219,28 +261,64 @@ export default function SimulatorPage() {
 
   const handleScram = () => {
     setScram(true);
+    scramRef.current = true;
+    setRod(0); // SCRAM: Insert all rods immediately
+    rodRef.current = 0;
     setTripActive(true);
     setTripReason("MANUAL SCRAM");
   };
 
+  const handleResetTrip = () => {
+    setScram(false);
+    scramRef.current = false;
+    setTripActive(false);
+    setTripReason(null);
+    // Note: Rods stay inserted at 0% - operator must manually withdraw
+  };
+
   // Computed values
-  const power = state ? state.P * 100 : 100;
-  const fuelTemp = state ? state.Tf : 600;
-  const coolantTemp = state ? state.Tc : 560;
+  const power = state ? state.P * 100 : 0.01; // Default to 0.01% when no state
+  const fuelTemp = state ? state.Tf : 500;
+  const coolantTemp = state ? state.Tc : 500;
   const simTime = state ? state.t : 0;
 
   return (
     <>
       <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+          margin: 0;
+          font-family: 'Share Tech Mono', monospace;
+        }
+
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.7; transform: scale(1.05); }
         }
+
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
         }
+
+        @keyframes glow {
+          0%, 100% { box-shadow: 0 0 5px currentColor, 0 0 10px currentColor; }
+          50% { box-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 30px currentColor; }
+        }
+
+        @keyframes scanline {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(100%); }
+        }
       `}</style>
+
+      <NavigationBar />
 
       <main style={container}>
         <header style={header}>
@@ -254,13 +332,8 @@ export default function SimulatorPage() {
                 </p>
               </div>
             </div>
-            <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
-              <a href="/train" style={trainingLink}>
-                🎓 TRAINING MODE
-              </a>
-              <div style={statusBadge(isRunning, isPaused, tripActive)}>
-                {tripActive ? "TRIP" : isRunning ? (isPaused ? "PAUSED" : "RUNNING") : "READY"}
-              </div>
+            <div style={statusBadge(isRunning, isPaused, tripActive)}>
+              {tripActive ? "TRIP" : isRunning ? (isPaused ? "PAUSED" : "RUNNING") : "READY"}
             </div>
           </div>
         </header>
@@ -300,6 +373,18 @@ export default function SimulatorPage() {
               <button style={resetButton} onClick={handleReset}>↺ RESET</button>
             </div>
 
+            {/* Trip Reset */}
+            {tripActive && (
+              <div style={tripResetSection}>
+                <button style={tripResetButton} onClick={handleResetTrip}>
+                  🔄 RESET TRIP
+                </button>
+                <div style={tripResetHint}>
+                  Clears SCRAM and re-enables controls
+                </div>
+              </div>
+            )}
+
             {/* Speed Control */}
             <div style={speedControl}>
               <span style={speedLabel}>SPEED:</span>
@@ -312,6 +397,24 @@ export default function SimulatorPage() {
                   {s}x
                 </button>
               ))}
+            </div>
+
+            {/* Learning Mode Toggle */}
+            <div style={learningModeSection}>
+              <button
+                style={learningModeButton(learningMode)}
+                onClick={() => setLearningMode(!learningMode)}
+              >
+                <span>💡 LEARNING MODE</span>
+                <span style={learningMode ? statusOn : statusOff}>
+                  {learningMode ? "ON" : "OFF"}
+                </span>
+              </button>
+              {learningMode && (
+                <div style={learningHint}>
+                  Learning mode shows helpful tips about each control. Perfect for beginners!
+                </div>
+              )}
             </div>
 
             {/* Rod Control */}
@@ -327,12 +430,22 @@ export default function SimulatorPage() {
                 step={0.01}
                 value={rod}
                 onChange={(e) => setRod(parseFloat(e.target.value))}
-                disabled={tripActive}
+                disabled={false}
                 style={slider}
               />
               <div style={helpText}>
                 0% = fully inserted (subcritical) · 100% = fully withdrawn
               </div>
+              {!tripActive && (
+                <div style={activeControlHint}>
+                  ✓ Adjustable during simulation
+                </div>
+              )}
+              {tripActive && (
+                <div style={warningText}>
+                  ⚠ SCRAM ACTIVE - Rods were inserted to 0% (still adjustable)
+                </div>
+              )}
             </div>
 
             {/* Pump & Scram */}
@@ -350,7 +463,7 @@ export default function SimulatorPage() {
                 type="button"
                 style={{ ...scramButton, ...(tripActive ? scramActive : {}) }}
                 onClick={handleScram}
-                disabled={tripActive}
+                disabled={false}
               >
                 <span style={toggleLabel}>SCRAM</span>
                 <span style={tripActive ? statusOff : statusArmed}>
@@ -363,9 +476,10 @@ export default function SimulatorPage() {
             <div style={hintBox}>
               <div style={hintTitle}>Quick Guide</div>
               <ul style={hintList as React.CSSProperties}>
-                <li>Start simulation, then slowly withdraw rods to increase power</li>
+                <li>Start simulation, then adjust rod slider in real-time</li>
+                <li>Slowly withdraw rods (drag right) to increase power</li>
                 <li>Watch thermal feedback stabilize the reactor</li>
-                <li>Trip pump to see coolant temperature rise</li>
+                <li>All controls work during simulation - just like a real control room</li>
                 <li>Protection system auto-trips at 110% power</li>
               </ul>
             </div>
@@ -475,19 +589,29 @@ export default function SimulatorPage() {
 // ============================================================================
 
 const container: React.CSSProperties = {
-  maxWidth: "1200px",
-  margin: "0 auto",
-  padding: "24px",
+  maxWidth: "100vw",
+  minHeight: "100vh",
+  margin: "0",
+  padding: "16px",
+  paddingTop: "76px", // Account for 60px nav bar + 16px spacing
+  background: "radial-gradient(ellipse at top, #1a1a1a, #0a0a0a)",
+  position: "relative",
 };
 
 const header: React.CSSProperties = {
-  marginBottom: "20px",
+  marginBottom: "16px",
+  background: "linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)",
+  border: "2px solid #333",
+  borderRadius: "4px",
+  padding: "12px 20px",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.8)",
+  position: "relative",
 };
 
 const headerRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "center",
   gap: "20px",
 };
 
@@ -498,105 +622,135 @@ const titleContainer: React.CSSProperties = {
 };
 
 const logoIcon: React.CSSProperties = {
-  width: "48px",
-  height: "48px",
-  filter: "brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%) drop-shadow(0 0 15px rgba(255, 153, 0, 0.8))",
+  width: "42px",
+  height: "42px",
+  filter: "brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%)",
+  animation: "glow 3s ease-in-out infinite",
 };
 
 const title: React.CSSProperties = {
-  fontSize: "28px",
-  margin: "0 0 4px",
-  color: "#ff9900",
-  letterSpacing: "2px",
+  fontSize: "24px",
+  margin: "0 0 2px",
+  color: "#00ff88",
+  letterSpacing: "3px",
+  textTransform: "uppercase",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 10px rgba(0, 255, 136, 0.5)",
 };
 
 const subtitle: React.CSSProperties = {
-  fontSize: "13px",
-  color: "#888",
+  fontSize: "11px",
+  color: "#6f6",
   margin: 0,
-};
-
-const trainingLink: React.CSSProperties = {
-  padding: "8px 16px",
-  borderRadius: "4px",
-  fontSize: "12px",
-  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
   letterSpacing: "1px",
-  background: "linear-gradient(135deg, #ff9900, #ff6600)",
-  color: "#000",
-  textDecoration: "none",
-  border: "none",
-  cursor: "pointer",
-  transition: "all 0.2s",
 };
 
 const statusBadge = (running: boolean, paused: boolean, trip: boolean): React.CSSProperties => ({
-  padding: "6px 12px",
-  borderRadius: "4px",
-  fontSize: "12px",
+  padding: "8px 16px",
+  borderRadius: "2px",
+  fontSize: "13px",
   fontWeight: "bold",
-  letterSpacing: "1px",
-  background: trip ? "rgba(255, 0, 0, 0.2)" : running ? (paused ? "rgba(255, 170, 0, 0.2)" : "rgba(0, 255, 0, 0.2)") : "rgba(255, 255, 255, 0.1)",
-  color: trip ? "#ff5555" : running ? (paused ? "#ffaa00" : "#00ff00") : "#888",
-  border: `1px solid ${trip ? "#ff0000" : running ? (paused ? "#ffaa00" : "#00ff00") : "#444"}`,
+  letterSpacing: "2px",
+  fontFamily: "'Share Tech Mono', monospace",
+  background: trip
+    ? "linear-gradient(180deg, #ff0000 0%, #aa0000 100%)"
+    : running
+      ? (paused ? "linear-gradient(180deg, #ffaa00 0%, #cc7700 100%)" : "linear-gradient(180deg, #00ff00 0%, #00aa00 100%)")
+      : "linear-gradient(180deg, #444 0%, #222 100%)",
+  color: trip ? "#000" : running ? "#000" : "#888",
+  border: `2px solid ${trip ? "#ff5555" : running ? (paused ? "#ffcc00" : "#00ff00") : "#555"}`,
+  boxShadow: trip ? "0 0 20px rgba(255, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.3)"
+    : running ? "0 0 15px rgba(0, 255, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.3)"
+    : "inset 0 1px 0 rgba(255,255,255,0.1)",
+  animation: trip ? "blink 0.5s infinite" : "none",
+  textShadow: trip || running ? "0 0 5px rgba(0, 0, 0, 0.5)" : "none",
 });
 
 const tripBanner: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "12px",
-  padding: "12px 16px",
+  gap: "16px",
+  padding: "16px 20px",
   marginBottom: "16px",
-  background: "rgba(255, 0, 0, 0.15)",
-  border: "2px solid #ff0000",
-  borderRadius: "4px",
-  color: "#ff5555",
-  fontSize: "14px",
+  background: "linear-gradient(180deg, #ff0000 0%, #aa0000 100%)",
+  border: "3px solid #ff5555",
+  borderRadius: "2px",
+  color: "#000",
+  fontSize: "15px",
   fontWeight: "bold",
-  letterSpacing: "1px",
-  animation: "blink 1s infinite",
+  letterSpacing: "3px",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
+  animation: "blink 0.5s infinite",
+  boxShadow: "0 0 30px rgba(255, 0, 0, 0.8), inset 0 2px 0 rgba(255,255,255,0.3), 0 4px 0 rgba(0,0,0,0.3)",
+  textShadow: "0 1px 0 rgba(255,255,255,0.5)",
 };
 
 const tripIcon: React.CSSProperties = {
-  fontSize: "20px",
+  fontSize: "28px",
+  animation: "pulse 1s ease-in-out infinite",
 };
 
 const layout: React.CSSProperties = {
-  display: "flex",
-  gap: "24px",
-  flexWrap: "wrap",
+  display: "grid",
+  gridTemplateColumns: "400px 1fr",
+  gap: "16px",
+  minHeight: "calc(100vh - 120px)",
 };
 
 const controlColumn: React.CSSProperties = {
-  flex: "1 1 320px",
-  minWidth: "300px",
+  background: "linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)",
+  border: "3px solid #444",
+  borderRadius: "4px",
+  padding: "16px",
+  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.8)",
+  position: "relative",
 };
 
 const displayColumn: React.CSSProperties = {
-  flex: "2 1 500px",
-  minWidth: "400px",
+  background: "linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)",
+  border: "3px solid #444",
+  borderRadius: "4px",
+  padding: "20px",
+  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.8)",
+  position: "relative",
 };
 
 const panelHeader: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "8px",
-  marginBottom: "12px",
+  gap: "10px",
+  marginBottom: "16px",
+  padding: "8px 12px",
+  background: "linear-gradient(180deg, #333 0%, #222 100%)",
+  border: "1px solid #444",
+  borderRadius: "2px",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)",
 };
 
 const panelIndicator = (active: boolean): React.CSSProperties => ({
-  width: "8px",
-  height: "8px",
+  width: "12px",
+  height: "12px",
   borderRadius: "50%",
-  background: active ? "#00ff00" : "#444",
-  boxShadow: active ? "0 0 8px #00ff00" : "none",
+  background: active
+    ? "radial-gradient(circle, #00ff00 0%, #00aa00 100%)"
+    : "radial-gradient(circle, #444 0%, #222 100%)",
+  boxShadow: active
+    ? "0 0 10px #00ff00, 0 0 20px #00ff00, inset 0 0 5px rgba(255,255,255,0.5)"
+    : "inset 0 2px 4px rgba(0,0,0,0.8)",
+  border: active ? "2px solid #00ff00" : "2px solid #333",
+  animation: active ? "pulse 2s ease-in-out infinite" : "none",
 });
 
 const panelTitle: React.CSSProperties = {
-  fontSize: "12px",
+  fontSize: "13px",
   letterSpacing: "2px",
-  color: "#ff9900",
+  color: "#00ffaa",
   fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
+  flex: 1,
 };
 
 const simControls: React.CSSProperties = {
@@ -607,6 +761,61 @@ const simControls: React.CSSProperties = {
 
 const buttonBase: React.CSSProperties = {
   flex: 1,
+  padding: "12px 8px",
+  borderRadius: "3px",
+  fontSize: "11px",
+  fontWeight: "bold",
+  letterSpacing: "1.5px",
+  cursor: "pointer",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
+  transition: "all 0.15s",
+  position: "relative",
+  boxShadow: "0 4px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
+};
+
+const startButton: React.CSSProperties = {
+  ...buttonBase,
+  background: "linear-gradient(180deg, #00aa00 0%, #008800 100%)",
+  color: "#000",
+  border: "2px solid #00ff00",
+  textShadow: "0 1px 0 rgba(0,0,0,0.5)",
+};
+
+const pauseButton: React.CSSProperties = {
+  ...buttonBase,
+  background: "linear-gradient(180deg, #ffaa00 0%, #cc8800 100%)",
+  color: "#000",
+  border: "2px solid #ffcc00",
+  textShadow: "0 1px 0 rgba(0,0,0,0.5)",
+};
+
+const stopButton: React.CSSProperties = {
+  ...buttonBase,
+  background: "linear-gradient(180deg, #555 0%, #333 100%)",
+  color: "#aaa",
+  border: "2px solid #666",
+  textShadow: "0 1px 0 rgba(0,0,0,0.5)",
+};
+
+const resetButton: React.CSSProperties = {
+  ...buttonBase,
+  background: "linear-gradient(180deg, #555 0%, #333 100%)",
+  color: "#aaa",
+  border: "2px solid #666",
+  textShadow: "0 1px 0 rgba(0,0,0,0.5)",
+};
+
+const tripResetSection: React.CSSProperties = {
+  marginBottom: "16px",
+  padding: "12px",
+  background: "rgba(255, 85, 85, 0.1)",
+  border: "1px solid #ff5555",
+  borderRadius: "4px",
+};
+
+const tripResetButton: React.CSSProperties = {
+  width: "100%",
   padding: "10px",
   border: "none",
   borderRadius: "4px",
@@ -614,34 +823,15 @@ const buttonBase: React.CSSProperties = {
   fontWeight: "bold",
   letterSpacing: "1px",
   cursor: "pointer",
+  background: "linear-gradient(135deg, #ff5555, #ff3333)",
+  color: "#fff",
 };
 
-const startButton: React.CSSProperties = {
-  ...buttonBase,
-  background: "linear-gradient(135deg, #3d2200, #554400)",
-  color: "#ff9900",
-  border: "1px solid #ff9900",
-};
-
-const pauseButton: React.CSSProperties = {
-  ...buttonBase,
-  background: "linear-gradient(135deg, #3d3d00, #555500)",
-  color: "#ffaa00",
-  border: "1px solid #ffaa00",
-};
-
-const stopButton: React.CSSProperties = {
-  ...buttonBase,
-  background: "rgba(0, 0, 0, 0.4)",
-  color: "#888",
-  border: "1px solid #444",
-};
-
-const resetButton: React.CSSProperties = {
-  ...buttonBase,
-  background: "rgba(0, 0, 0, 0.4)",
-  color: "#888",
-  border: "1px solid #444",
+const tripResetHint: React.CSSProperties = {
+  marginTop: "8px",
+  fontSize: "10px",
+  color: "#ff9999",
+  textAlign: "center",
 };
 
 const speedControl: React.CSSProperties = {
@@ -676,25 +866,57 @@ const label: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   fontSize: "11px",
-  letterSpacing: "1px",
-  color: "#ccc",
-  marginBottom: "6px",
+  letterSpacing: "1.5px",
+  color: "#00ffaa",
+  marginBottom: "8px",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
 };
 
 const labelValue: React.CSSProperties = {
-  color: "#ff9900",
+  color: "#00ff00",
   fontWeight: "bold",
+  fontSize: "13px",
+  textShadow: "0 0 10px rgba(0, 255, 0, 0.5)",
+  fontFamily: "'Share Tech Mono', monospace",
 };
 
 const slider: React.CSSProperties = {
   width: "100%",
-  accentColor: "#ff9900",
+  height: "8px",
+  accentColor: "#00ff00",
+  background: "#222",
+  borderRadius: "4px",
+  cursor: "pointer",
 };
 
 const helpText: React.CSSProperties = {
-  marginTop: "4px",
-  fontSize: "10px",
-  color: "#666",
+  marginTop: "6px",
+  fontSize: "9px",
+  color: "#555",
+  fontFamily: "'Share Tech Mono', monospace",
+  letterSpacing: "0.5px",
+};
+
+const activeControlHint: React.CSSProperties = {
+  marginTop: "6px",
+  fontSize: "9px",
+  color: "#00ff00",
+  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 5px rgba(0, 255, 0, 0.5)",
+  letterSpacing: "1px",
+};
+
+const warningText: React.CSSProperties = {
+  marginTop: "6px",
+  fontSize: "9px",
+  color: "#ff5555",
+  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 5px rgba(255, 85, 85, 0.5)",
+  letterSpacing: "1px",
+  animation: "blink 1s infinite",
 };
 
 const controlRow: React.CSSProperties = {
@@ -705,40 +927,71 @@ const controlRow: React.CSSProperties = {
 
 const toggleButton: React.CSSProperties = {
   flex: 1,
-  padding: "10px 12px",
-  borderRadius: "4px",
-  border: "1px solid #444",
-  background: "rgba(0, 0, 0, 0.4)",
+  padding: "14px 16px",
+  borderRadius: "3px",
+  border: "3px solid #444",
+  background: "linear-gradient(180deg, #333 0%, #1a1a1a 100%)",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   cursor: "pointer",
+  boxShadow: "0 4px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+  transition: "all 0.15s",
 };
 
 const toggleButtonActive: React.CSSProperties = {
-  borderColor: "#ff9900",
-  boxShadow: "0 0 10px rgba(255, 153, 0, 0.3)",
+  borderColor: "#00ff00",
+  boxShadow: "0 4px 0 rgba(0,0,0,0.4), 0 0 20px rgba(0, 255, 0, 0.6), inset 0 1px 0 rgba(255,255,255,0.2)",
+  background: "linear-gradient(180deg, #1a3a1a 0%, #0a1a0a 100%)",
 };
 
 const scramButton: React.CSSProperties = {
   ...toggleButton,
   borderColor: "#aa0000",
+  background: "linear-gradient(180deg, #3a1a1a 0%, #1a0a0a 100%)",
 };
 
 const scramActive: React.CSSProperties = {
   borderColor: "#ff0000",
-  boxShadow: "0 0 12px rgba(255, 0, 0, 0.5)",
+  boxShadow: "0 4px 0 rgba(0,0,0,0.4), 0 0 25px rgba(255, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.2)",
+  background: "linear-gradient(180deg, #ff0000 0%, #aa0000 100%)",
+  animation: "glow 1s ease-in-out infinite",
 };
 
 const toggleLabel: React.CSSProperties = {
-  fontSize: "11px",
-  letterSpacing: "1px",
-  color: "#ccc",
+  fontSize: "10px",
+  letterSpacing: "1.5px",
+  color: "#00ffaa",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
 };
 
-const statusOn: React.CSSProperties = { fontSize: "12px", color: "#00ff00", fontWeight: "bold" };
-const statusOff: React.CSSProperties = { fontSize: "12px", color: "#ff5555", fontWeight: "bold" };
-const statusArmed: React.CSSProperties = { fontSize: "12px", color: "#ffaa00", fontWeight: "bold" };
+const statusOn: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#00ff00",
+  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 10px rgba(0, 255, 0, 0.8)",
+  letterSpacing: "1px",
+};
+
+const statusOff: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#ff5555",
+  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 10px rgba(255, 85, 85, 0.8)",
+  letterSpacing: "1px",
+};
+
+const statusArmed: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#ffaa00",
+  fontWeight: "bold",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 10px rgba(255, 170, 0, 0.8)",
+  letterSpacing: "1px",
+};
 
 const hintBox: React.CSSProperties = {
   padding: "12px",
@@ -764,47 +1017,66 @@ const hintList: React.CSSProperties = {
 
 // Display styles
 const powerDisplay: React.CSSProperties = {
-  padding: "16px",
+  padding: "20px",
   borderRadius: "4px",
-  border: "1px solid #333",
-  background: "rgba(0, 0, 0, 0.5)",
-  marginBottom: "16px",
+  border: "3px solid #222",
+  background: "linear-gradient(180deg, #0a0a0a 0%, #000 100%)",
+  marginBottom: "20px",
+  boxShadow: "inset 0 0 20px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.5)",
+  position: "relative",
 };
 
 const powerHeader: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  marginBottom: "8px",
+  marginBottom: "12px",
+  padding: "6px 10px",
+  background: "rgba(0, 255, 170, 0.05)",
+  borderRadius: "2px",
 };
 
 const powerLabel: React.CSSProperties = {
-  fontSize: "11px",
-  letterSpacing: "1px",
-  color: "#888",
+  fontSize: "12px",
+  letterSpacing: "2px",
+  color: "#00ffaa",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
 };
 
 const powerStatus = (power: number): React.CSSProperties => ({
   fontSize: "11px",
   fontWeight: "bold",
-  color: power > 105 ? "#ff5555" : power < 50 ? "#ffaa00" : "#00ff00",
+  letterSpacing: "1px",
+  fontFamily: "'Share Tech Mono', monospace",
+  color: power > 105 ? "#ff0000" : power < 50 ? "#ffaa00" : "#00ff00",
+  textShadow: `0 0 10px ${power > 105 ? "#ff0000" : power < 50 ? "#ffaa00" : "#00ff00"}`,
+  animation: power > 105 ? "blink 0.5s infinite" : "none",
 });
 
 const powerValueContainer: React.CSSProperties = {
   display: "flex",
   alignItems: "baseline",
-  gap: "4px",
+  gap: "8px",
+  padding: "10px",
+  background: "#000",
+  border: "2px solid #333",
+  borderRadius: "2px",
+  boxShadow: "inset 0 2px 8px rgba(0,0,0,0.8)",
 };
 
 const powerValue = (power: number): React.CSSProperties => ({
-  fontSize: "48px",
+  fontSize: "64px",
   fontWeight: "bold",
-  color: power > 110 ? "#ff5555" : power > 105 ? "#ffaa00" : "#ff9900",
-  fontFamily: "monospace",
+  color: power > 110 ? "#ff0000" : power > 105 ? "#ffaa00" : "#00ff00",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: `0 0 20px ${power > 110 ? "#ff0000" : power > 105 ? "#ffaa00" : "#00ff00"}, 0 0 40px ${power > 110 ? "#ff0000" : power > 105 ? "#ffaa00" : "#00ff00"}`,
+  letterSpacing: "2px",
 });
 
 const powerUnit: React.CSSProperties = {
-  fontSize: "24px",
+  fontSize: "28px",
   color: "#666",
+  fontFamily: "'Share Tech Mono', monospace",
 };
 
 const powerBar: React.CSSProperties = {
@@ -823,42 +1095,53 @@ const powerBarFill = (power: number): React.CSSProperties => ({
 });
 
 const graphContainer: React.CSSProperties = {
-  padding: "12px",
+  padding: "16px",
   borderRadius: "4px",
-  border: "1px solid #333",
-  background: "rgba(0, 0, 0, 0.5)",
-  marginBottom: "16px",
+  border: "3px solid #222",
+  background: "linear-gradient(180deg, #0a0a0a 0%, #000 100%)",
+  marginBottom: "20px",
+  boxShadow: "inset 0 0 20px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.5)",
 };
 
 const graphHeader: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  marginBottom: "8px",
+  marginBottom: "12px",
+  padding: "6px 10px",
+  background: "rgba(0, 255, 170, 0.05)",
+  borderRadius: "2px",
 };
 
 const graphTitle: React.CSSProperties = {
-  fontSize: "11px",
-  letterSpacing: "1px",
-  color: "#888",
+  fontSize: "12px",
+  letterSpacing: "2px",
+  color: "#00ffaa",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
 };
 
 const graphTime: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#ff9900",
-  fontFamily: "monospace",
+  fontSize: "13px",
+  color: "#00ff00",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: "0 0 10px rgba(0, 255, 0, 0.5)",
 };
 
 const graphSvg: React.CSSProperties = {
-  background: "rgba(0, 0, 0, 0.3)",
+  background: "#000",
+  border: "2px solid #1a1a1a",
   borderRadius: "2px",
+  boxShadow: "inset 0 2px 8px rgba(0,0,0,0.8)",
 };
 
 const graphLabels: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  fontSize: "9px",
-  color: "#555",
-  marginTop: "4px",
+  fontSize: "10px",
+  color: "#00ffaa",
+  marginTop: "8px",
+  fontFamily: "'Share Tech Mono', monospace",
+  letterSpacing: "1px",
 };
 
 const metricsGrid: React.CSSProperties = {
@@ -869,69 +1152,87 @@ const metricsGrid: React.CSSProperties = {
 };
 
 const metricCard: React.CSSProperties = {
-  padding: "12px",
+  padding: "14px",
   borderRadius: "4px",
-  border: "1px solid #333",
-  background: "rgba(0, 0, 0, 0.5)",
+  border: "3px solid #222",
+  background: "linear-gradient(180deg, #0a0a0a 0%, #000 100%)",
+  boxShadow: "inset 0 0 15px rgba(0,0,0,0.8), 0 2px 6px rgba(0,0,0,0.5)",
 };
 
 const metricLabel: React.CSSProperties = {
   fontSize: "10px",
-  letterSpacing: "1px",
-  color: "#888",
-  marginBottom: "4px",
+  letterSpacing: "1.5px",
+  color: "#00ffaa",
+  marginBottom: "8px",
+  fontFamily: "'Share Tech Mono', monospace",
+  textTransform: "uppercase",
 };
 
 const metricValue = (warning: boolean): React.CSSProperties => ({
-  fontSize: "24px",
+  fontSize: "28px",
   fontWeight: "bold",
-  color: warning ? "#ff5555" : "#ff9900",
-  fontFamily: "monospace",
+  color: warning ? "#ff0000" : "#00ff00",
+  fontFamily: "'Share Tech Mono', monospace",
+  textShadow: `0 0 15px ${warning ? "#ff0000" : "#00ff00"}`,
+  letterSpacing: "1px",
 });
 
 const metricUnit: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#666",
+  fontSize: "14px",
+  color: "#00ffaa",
   marginLeft: "4px",
+  fontFamily: "'Share Tech Mono', monospace",
 };
 
 const reactivityPanel: React.CSSProperties = {
-  padding: "12px",
+  padding: "16px",
   borderRadius: "4px",
-  border: "1px solid #333",
-  background: "rgba(0, 0, 0, 0.5)",
+  border: "3px solid #222",
+  background: "linear-gradient(180deg, #0a0a0a 0%, #000 100%)",
+  boxShadow: "inset 0 0 20px rgba(0,0,0,0.8), 0 2px 8px rgba(0,0,0,0.5)",
 };
 
 const reactivityGrid: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "6px",
+  gap: "10px",
 };
 
 const reactivityRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   fontSize: "12px",
+  padding: "6px 8px",
+  background: "rgba(0, 255, 170, 0.03)",
+  borderRadius: "2px",
 };
 
 const reactivityRowTotal: React.CSSProperties = {
   ...reactivityRow,
-  borderTop: "1px solid #333",
-  paddingTop: "6px",
-  marginTop: "4px",
+  borderTop: "2px solid #00ffaa",
+  paddingTop: "10px",
+  marginTop: "8px",
+  background: "rgba(0, 255, 170, 0.08)",
+  fontSize: "13px",
 };
 
 const reactivityLabel: React.CSSProperties = {
-  color: "#888",
+  color: "#00ffaa",
+  fontFamily: "'Share Tech Mono', monospace",
+  letterSpacing: "1px",
 };
 
 const reactivityValue: React.CSSProperties = {
-  color: "#ccc",
-  fontFamily: "monospace",
+  color: "#00ff00",
+  fontFamily: "'Share Tech Mono', monospace",
+  letterSpacing: "1px",
+  textShadow: "0 0 8px rgba(0, 255, 0, 0.5)",
 };
 
 const reactivityValueTotal = (rho: number): React.CSSProperties => ({
   ...reactivityValue,
   color: rho > 0.0001 ? "#ffaa00" : rho < -0.0001 ? "#66aaff" : "#00ff00",
   fontWeight: "bold",
+  fontSize: "14px",
+  textShadow: `0 0 12px ${rho > 0.0001 ? "rgba(255, 170, 0, 0.8)" : rho < -0.0001 ? "rgba(102, 170, 255, 0.8)" : "rgba(0, 255, 0, 0.8)"}`,
 });

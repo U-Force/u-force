@@ -11,6 +11,9 @@ export * from './roles';
 // Metrics
 export { MetricsCollector } from './metrics';
 
+// Modules
+export * from './modules';
+
 // Scenarios
 import { normalStartupScenario } from './scenarios/startup';
 import { pumpTripScenario } from './scenarios/pump-trip';

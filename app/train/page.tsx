@@ -15,10 +15,13 @@ import {
   type TrainingSession,
   MetricsCollector,
   getRolePermissions,
+  markScenarioCompleted,
 } from "../../lib/training";
 import ScenarioSelector from "../../components/ScenarioSelector";
 import ScenarioBriefing from "../../components/ScenarioBriefing";
 import ScenarioDebrief from "../../components/ScenarioDebrief";
+import TrainingModulesSidebar from "../../components/TrainingModulesSidebar";
+import NavigationBar from "../../components/NavigationBar";
 
 const DT = 0.01; // 10ms timestep
 const HISTORY_LENGTH = 500; // 5 seconds of history
@@ -44,7 +47,7 @@ export default function TrainingPage() {
   const [rod, setRod] = useState(0.05);
   const [pumpOn, setPumpOn] = useState(true);
   const [scram, setScram] = useState(false);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(0.5); // Start at 0.5x speed - balanced pace
 
   // Simulation states
   const [isRunning, setIsRunning] = useState(false);
@@ -62,6 +65,16 @@ export default function TrainingPage() {
   const accumulatedRef = useRef<number>(0);
   const scenarioTimeRef = useRef<number>(0);
 
+  // Refs for real-time controls (avoid stale closures)
+  const rodRef = useRef(rod);
+  const pumpRef = useRef(pumpOn);
+  const scramRef = useRef(scram);
+
+  // Keep refs in sync with state
+  useEffect(() => { rodRef.current = rod; }, [rod]);
+  useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
+  useEffect(() => { scramRef.current = scram; }, [scram]);
+
   // Get role permissions
   const permissions = getRolePermissions(currentRole);
 
@@ -76,22 +89,35 @@ export default function TrainingPage() {
         initialRod = scenario.initialState.controls.rod;
         setSpeed(scenario.initialState.timeAcceleration);
       } else {
-        // Free play mode
+        // Free play mode - start in TRUE COLD SHUTDOWN (subcritical, stable)
+        const initialPower = 1e-8; // Essentially zero power (shutdown)
+        const coldTemp = 300; // Cold shutdown temperature (K)
+
+        // Calculate equilibrium precursor concentrations for this tiny power
+        const beta = [0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027];
+        const lambda = [0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01];
+        const Lambda = 1e-3; // MUST MATCH params.ts LAMBDA_PROMPT
+
+        const precursors = beta.map((b, i) => (b / lambda[i]) * (initialPower / Lambda));
+
         initialState = {
           t: 0,
-          P: 0.0001,
-          Tf: 500,
-          Tc: 500,
-          C: [0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001],
+          P: initialPower,
+          Tf: coldTemp,
+          Tc: coldTemp,
+          C: precursors,
         };
-        initialRod = 0.05;
+        initialRod = 0.0; // Start with rods fully inserted (0%) - truly shutdown
       }
 
       modelRef.current = new ReactorModel(initialState, DEFAULT_PARAMS);
       setState(initialState);
       setRod(initialRod);
+      rodRef.current = initialRod;
       setScram(false);
+      scramRef.current = false;
       setPumpOn(true);
+      pumpRef.current = true;
       setTripActive(false);
       setTripReason(null);
       setHistory([{
@@ -107,6 +133,10 @@ export default function TrainingPage() {
       setReactivity(rho);
 
       scenarioTimeRef.current = 0;
+
+      if (!scenario) {
+        console.log(`Initialized in cold shutdown: P=${initialState.P}, T=${initialState.Tf}K, rod=${initialRod*100}%, rho=${(rho.rhoTotal*1e5).toFixed(0)} pcm`);
+      }
     } catch (error) {
       console.error("Initialization error:", error);
     }
@@ -128,7 +158,14 @@ export default function TrainingPage() {
 
   // Animation loop
   const tick = useCallback((timestamp: number) => {
-    if (!modelRef.current || isPaused) {
+    if (!modelRef.current) {
+      animationRef.current = requestAnimationFrame(tick);
+      return;
+    }
+
+    // PAUSE: Don't update simulation, but keep loop running for responsiveness
+    if (isPaused) {
+      lastTimeRef.current = 0; // Reset time on unpause
       animationRef.current = requestAnimationFrame(tick);
       return;
     }
@@ -147,8 +184,13 @@ export default function TrainingPage() {
     const stepsNeeded = Math.floor(accumulatedRef.current / DT);
     accumulatedRef.current -= stepsNeeded * DT;
 
-    let currentScram = scram;
-    const controls: ControlInputs = { rod, pumpOn, scram: currentScram };
+    // Use refs for real-time control values
+    let currentScram = scramRef.current;
+    const controls: ControlInputs = {
+      rod: rodRef.current,
+      pumpOn: pumpRef.current,
+      scram: currentScram
+    };
 
     try {
       for (let i = 0; i < stepsNeeded; i++) {
@@ -161,11 +203,14 @@ export default function TrainingPage() {
             setTripActive(true);
             setTripReason(reason);
             setScram(true);
+            scramRef.current = true;
+            setRod(0); // Auto-trip: Insert all rods
+            rodRef.current = 0;
             currentScram = true;
 
             // Record trip in metrics
             if (metricsCollector) {
-              metricsCollector.recordState(newState, rod, pumpOn, true);
+              metricsCollector.recordState(newState, rodRef.current, pumpRef.current, true);
             }
           }
         }
@@ -175,19 +220,22 @@ export default function TrainingPage() {
       setTripActive(true);
       setTripReason("SIMULATION ERROR");
       setScram(true);
+      scramRef.current = true;
+      setRod(0); // Error: Insert all rods
+      rodRef.current = 0;
       handleStop();
       return;
     }
 
     const currentState = modelRef.current.getState();
-    const currentReactivity = modelRef.current.getReactivity({ rod, pumpOn, scram: currentScram });
+    const currentReactivity = modelRef.current.getReactivity(controls);
 
     setState(currentState);
     setReactivity(currentReactivity);
 
     // Record metrics if in training mode
     if (metricsCollector) {
-      metricsCollector.recordState(currentState, rod, pumpOn, scram);
+      metricsCollector.recordState(currentState, rodRef.current, pumpRef.current, scramRef.current);
     }
 
     // Update history
@@ -204,7 +252,7 @@ export default function TrainingPage() {
     });
 
     animationRef.current = requestAnimationFrame(tick);
-  }, [isPaused, speed, rod, pumpOn, scram, tripActive, checkTrips, metricsCollector]);
+  }, [isPaused, speed, tripActive, checkTrips, metricsCollector]);
 
   // Start/Stop handlers
   const handleStart = () => {
@@ -234,14 +282,31 @@ export default function TrainingPage() {
     // Finalize metrics if in training mode
     if (metricsCollector && selectedScenario && state) {
       const finalMetrics = metricsCollector.finalize(state, selectedScenario);
+
+      // Track completion if scenario passed
+      if (finalMetrics.success) {
+        markScenarioCompleted(selectedScenario.id);
+      }
+
       setAppState('debrief');
     }
   };
 
   const handleScram = () => {
     setScram(true);
+    scramRef.current = true;
+    setRod(0); // SCRAM: Insert all rods immediately
+    rodRef.current = 0;
     setTripActive(true);
     setTripReason("MANUAL SCRAM");
+  };
+
+  const handleResetTrip = () => {
+    setScram(false);
+    scramRef.current = false;
+    setTripActive(false);
+    setTripReason(null);
+    // Note: Rods stay inserted at 0% - operator must manually withdraw
   };
 
   // Scenario selection handlers
@@ -290,39 +355,52 @@ export default function TrainingPage() {
   // Render based on app state
   if (appState === 'selector') {
     return (
-      <ScenarioSelector
-        scenarios={SCENARIOS}
-        onSelectScenario={handleSelectScenario}
-        onSelectFreePlay={handleSelectFreePlay}
-      />
+      <>
+        <NavigationBar />
+        <TrainingModulesSidebar />
+        <ScenarioSelector
+          scenarios={SCENARIOS}
+          onSelectScenario={handleSelectScenario}
+          onSelectFreePlay={handleSelectFreePlay}
+        />
+      </>
     );
   }
 
   if (appState === 'briefing' && selectedScenario) {
     return (
-      <ScenarioBriefing
-        scenario={selectedScenario}
-        role={currentRole}
-        onStart={handleStartScenario}
-        onBack={handleBackToSelector}
-      />
+      <>
+        <NavigationBar />
+        <TrainingModulesSidebar currentScenarioId={selectedScenario.id} />
+        <ScenarioBriefing
+          scenario={selectedScenario}
+          role={currentRole}
+          onStart={handleStartScenario}
+          onBack={handleBackToSelector}
+        />
+      </>
     );
   }
 
   if (appState === 'debrief' && metricsCollector && selectedScenario) {
     return (
-      <ScenarioDebrief
-        metrics={metricsCollector.getMetrics()}
-        scenario={selectedScenario}
-        onRestart={handleRestartScenario}
-        onBackToScenarios={handleBackToSelector}
-      />
+      <>
+        <NavigationBar />
+        <TrainingModulesSidebar currentScenarioId={selectedScenario.id} />
+        <ScenarioDebrief
+          metrics={metricsCollector.getMetrics()}
+          scenario={selectedScenario}
+          onRestart={handleRestartScenario}
+          onBackToScenarios={handleBackToSelector}
+        />
+      </>
     );
   }
 
   // Running state - show simulator
   return (
     <>
+      <NavigationBar />
       <style jsx global>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
@@ -386,6 +464,18 @@ export default function TrainingPage() {
               <button style={stopButton} onClick={handleStop} disabled={!isRunning}>⏹ STOP</button>
             </div>
 
+            {/* Trip Reset */}
+            {tripActive && (
+              <div style={tripResetSection}>
+                <button style={tripResetButton} onClick={handleResetTrip}>
+                  🔄 RESET TRIP
+                </button>
+                <div style={tripResetHint}>
+                  Clears SCRAM and re-enables controls
+                </div>
+              </div>
+            )}
+
             {/* Speed Control */}
             <div style={speedControl}>
               <span style={speedLabel}>SPEED:</span>
@@ -413,12 +503,22 @@ export default function TrainingPage() {
                 step={0.01}
                 value={rod}
                 onChange={(e) => setRod(parseFloat(e.target.value))}
-                disabled={tripActive || !permissions.canControlRods}
+                disabled={!permissions.canControlRods}
                 style={slider}
               />
               <div style={helpText}>
                 0% = fully inserted (subcritical) · 100% = fully withdrawn
               </div>
+              {!tripActive && permissions.canControlRods && (
+                <div style={activeControlHint}>
+                  ✓ Adjustable during simulation
+                </div>
+              )}
+              {tripActive && permissions.canControlRods && (
+                <div style={warningText}>
+                  ⚠ SCRAM ACTIVE - Rods were inserted to 0% (still adjustable)
+                </div>
+              )}
               {!permissions.canControlRods && (
                 <div style={warningText}>
                   ⚠ Rod control disabled for this role
@@ -442,7 +542,7 @@ export default function TrainingPage() {
                 type="button"
                 style={{ ...scramButton, ...(tripActive ? scramActive : {}) }}
                 onClick={handleScram}
-                disabled={tripActive || !permissions.canScram}
+                disabled={!permissions.canScram}
               >
                 <span style={toggleLabel}>SCRAM</span>
                 <span style={tripActive ? statusOff : statusArmed}>
@@ -556,6 +656,7 @@ const container: React.CSSProperties = {
   maxWidth: "1200px",
   margin: "0 auto",
   padding: "24px",
+  paddingTop: "84px", // Account for 60px nav bar + 24px spacing
 };
 
 const header: React.CSSProperties = {
@@ -701,6 +802,34 @@ const stopButton: React.CSSProperties = {
   border: "1px solid #444",
 };
 
+const tripResetSection: React.CSSProperties = {
+  marginBottom: "16px",
+  padding: "12px",
+  background: "rgba(255, 85, 85, 0.1)",
+  border: "1px solid #ff5555",
+  borderRadius: "4px",
+};
+
+const tripResetButton: React.CSSProperties = {
+  width: "100%",
+  padding: "10px",
+  border: "none",
+  borderRadius: "4px",
+  fontSize: "12px",
+  fontWeight: "bold",
+  letterSpacing: "1px",
+  cursor: "pointer",
+  background: "linear-gradient(135deg, #ff5555, #ff3333)",
+  color: "#fff",
+};
+
+const tripResetHint: React.CSSProperties = {
+  marginTop: "8px",
+  fontSize: "10px",
+  color: "#ff9999",
+  textAlign: "center",
+};
+
 const speedControl: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -752,6 +881,13 @@ const helpText: React.CSSProperties = {
   marginTop: "4px",
   fontSize: "10px",
   color: "#666",
+};
+
+const activeControlHint: React.CSSProperties = {
+  marginTop: "4px",
+  fontSize: "10px",
+  color: "#00ff00",
+  fontWeight: "bold",
 };
 
 const warningText: React.CSSProperties = {
