@@ -28,11 +28,13 @@ export const coolantSystemScenario: TrainingScenario = {
       C: [0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0005],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.35,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1,
   },

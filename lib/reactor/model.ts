@@ -53,6 +53,7 @@ import {
   rodWorthCurve,
   BETA_TOTAL,
   SIGMA_F_MACRO,
+  NUM_DECAY_HEAT_GROUPS,
 } from './params';
 
 import {
@@ -172,6 +173,20 @@ export function computeXenonReactivity(Xe135: number, params: ReactorParams): nu
 }
 
 /**
+ * Computes soluble boron reactivity.
+ * Boron-10 dissolved in coolant absorbs neutrons, providing negative reactivity.
+ *
+ * @param boronConc Boron concentration [ppm]
+ * @param params Reactor parameters
+ * @returns Boron reactivity (typically negative) [Δk/k]
+ */
+export function computeBoronReactivity(boronConc: number, params: ReactorParams): number {
+  // ρ_boron = α_B × C_B
+  // α_B is negative (~-10 pcm/ppm), so more boron = more negative reactivity
+  return params.boronCoeff * boronConc;
+}
+
+/**
  * Computes total reactivity and all components.
  *
  * @param state Current reactor state
@@ -197,13 +212,15 @@ export function computeReactivity(
   const rhoDoppler = computeDopplerReactivity(state.Tf, params);
   const rhoMod = computeModeratorReactivity(state.Tc, params);
   const rhoXenon = computeXenonReactivity(state.Xe135, params);
+  const rhoBoron = computeBoronReactivity(controls.boronConc, params);
 
   return {
     rhoExt,
     rhoDoppler,
     rhoMod,
     rhoXenon,
-    rhoTotal: rhoExt + rhoDoppler + rhoMod + rhoXenon,
+    rhoBoron,
+    rhoTotal: rhoExt + rhoDoppler + rhoMod + rhoXenon + rhoBoron,
   };
 }
 
@@ -221,6 +238,7 @@ interface StateDerivatives {
   dTc: number;
   dI135: number;
   dXe135: number;
+  dDecayHeat: number[];
 }
 
 /**
@@ -275,9 +293,15 @@ export function computeDerivatives(
   // Thermal model: fuel temperature
   // dTf/dt = (Q_gen - Q_fc) / (m_f * c_f)
   // =========================================================================
-  
-  // Heat generation in fuel: Q_gen = P * P_nominal
-  const Q_gen = P * params.powerNominal;
+
+  // Total decay heat (sum of all groups, normalized to P_nominal)
+  let totalDecayHeat = 0;
+  for (let i = 0; i < state.decayHeat.length; i++) {
+    totalDecayHeat += state.decayHeat[i];
+  }
+
+  // Heat generation in fuel: Q_gen = (P_fission + P_decay) * P_nominal
+  const Q_gen = (P + totalDecayHeat) * params.powerNominal;
   
   // Heat transfer from fuel to coolant: Q_fc = h_fc * (Tf - Tc)
   const Q_fc = params.hFuelCoolant * (Tf - Tc);
@@ -336,7 +360,22 @@ export function computeDerivatives(
   const dI135 = dI135_real * params.xenonTimeAcceleration;
   const dXe135 = dXe135_real * params.xenonTimeAcceleration;
 
-  return { dP, dC, dTf, dTc, dI135, dXe135 };
+  // =========================================================================
+  // Decay heat dynamics: 3-group fission product decay model
+  // dD_i/dt = (f_i * λ_i * P - λ_i * D_i) * accel
+  // At equilibrium: D_i = f_i * P (total ~6.6% of operating power)
+  // =========================================================================
+
+  const dDecayHeat: number[] = [];
+  for (let i = 0; i < state.decayHeat.length; i++) {
+    const f_i = params.decayHeatFractions[i];
+    const lambda_i = params.decayHeatLambdas[i];
+    // Production proportional to fission power, decay proportional to inventory
+    const dD_real = f_i * lambda_i * P - lambda_i * state.decayHeat[i];
+    dDecayHeat.push(dD_real * params.decayHeatTimeAcceleration);
+  }
+
+  return { dP, dC, dTf, dTc, dI135, dXe135, dDecayHeat };
 }
 
 // ============================================================================
@@ -359,6 +398,7 @@ function applyDerivatives(
     Tc: state.Tc + derivatives.dTc * dt,
     I135: state.I135 + derivatives.dI135 * dt,
     Xe135: state.Xe135 + derivatives.dXe135 * dt,
+    decayHeat: state.decayHeat.map((d, i) => d + derivatives.dDecayHeat[i] * dt),
   };
 }
 
@@ -377,6 +417,7 @@ function addDerivatives(
     dTc: a.dTc + b.dTc * scale,
     dI135: a.dI135 + b.dI135 * scale,
     dXe135: a.dXe135 + b.dXe135 * scale,
+    dDecayHeat: a.dDecayHeat.map((ad, i) => ad + b.dDecayHeat[i] * scale),
   };
 }
 
@@ -391,6 +432,7 @@ function scaleDerivatives(d: StateDerivatives, scale: number): StateDerivatives 
     dTc: d.dTc * scale,
     dI135: d.dI135 * scale,
     dXe135: d.dXe135 * scale,
+    dDecayHeat: d.dDecayHeat.map(dd => dd * scale),
   };
 }
 
@@ -496,7 +538,7 @@ export class ReactorModel {
     
     // Validate initial state
     validateInitialState(initialState, params);
-    this.state = { ...initialState, C: [...initialState.C] };
+    this.state = { ...initialState, C: [...initialState.C], decayHeat: [...initialState.decayHeat] };
     
     // Set up configuration with defaults
     this.config = {
@@ -513,6 +555,7 @@ export class ReactorModel {
     return {
       ...this.state,
       C: [...this.state.C],
+      decayHeat: [...this.state.decayHeat],
     };
   }
   
@@ -659,7 +702,7 @@ export class ReactorModel {
    */
   reset(newState: ReactorState): void {
     validateInitialState(newState, this.params);
-    this.state = { ...newState, C: [...newState.C] };
+    this.state = { ...newState, C: [...newState.C], decayHeat: [...newState.decayHeat] };
     this.scramStartTime = null;
     this.scramWasActive = false;
   }
@@ -704,9 +747,11 @@ export function createSteadyState(
   );
   
   // Compute equilibrium temperatures
-  // At steady state: Q_gen = Q_fc = Q_sink
-  // Q_gen = P * P_nom
-  const Q_gen = P * params.powerNominal;
+  // At steady state: Q_total = Q_fc = Q_sink
+  // Q_total = (P_fission + P_decay) * P_nom
+  // At equilibrium, decay heat = Σf_i * P, so Q_total = P * (1 + Σf_i) * P_nom
+  const decayHeatFraction = params.decayHeatFractions.reduce((sum, f) => sum + f, 0);
+  const Q_gen = P * (1 + decayHeatFraction) * params.powerNominal;
   
   // h_cool depends on pump status
   const hCool = pumpOn 
@@ -734,6 +779,10 @@ export function createSteadyState(
   const Xe_eq = (params.gammaXe * fissionRate + params.lambdaI135 * I_eq) /
                 (params.lambdaXe135 + sigmaXe_cm2 * flux);
 
+  // Compute equilibrium decay heat per group
+  // At steady state: D_i = f_i * P
+  const decayHeat = params.decayHeatFractions.map(f => f * P);
+
   return {
     t: 0,
     P,
@@ -742,6 +791,7 @@ export function createSteadyState(
     Tc,
     I135: I_eq,
     Xe135: Xe_eq,
+    decayHeat,
   };
 }
 
@@ -761,12 +811,14 @@ export function createSteadyState(
 export function computeCriticalRodPosition(
   Tf: number,
   Tc: number,
-  params: ReactorParams = DEFAULT_PARAMS
+  params: ReactorParams = DEFAULT_PARAMS,
+  boronConc: number = 0
 ): number | null {
   const rhoDoppler = params.alphaFuel * (Tf - params.TfRef);
   const rhoMod = params.alphaCoolant * (Tc - params.TcRef);
-  const rhoFeedback = rhoDoppler + rhoMod;
-  
+  const rhoBoron = params.boronCoeff * boronConc;
+  const rhoFeedback = rhoDoppler + rhoMod + rhoBoron;
+
   // Need: rodWorthMax * rodWorthCurve(rod) - shutdownMargin = -rhoFeedback
   // So: rodWorthMax * rodWorthCurve(rod) = shutdownMargin - rhoFeedback
   const targetWorth = params.shutdownMargin - rhoFeedback;
@@ -807,10 +859,11 @@ export function computeCriticalRodPosition(
 export function createCriticalSteadyState(
   P: number = 1.0,
   params: ReactorParams = DEFAULT_PARAMS,
-  pumpOn: boolean = true
+  pumpOn: boolean = true,
+  boronConc: number = 0
 ): { state: ReactorState; rodPosition: number } {
   const state = createSteadyState(P, params, pumpOn);
-  const rodPosition = computeCriticalRodPosition(state.Tf, state.Tc, params);
+  const rodPosition = computeCriticalRodPosition(state.Tf, state.Tc, params, boronConc);
   
   if (rodPosition === null) {
     throw new ValidationError(
@@ -851,5 +904,6 @@ export function createColdShutdownState(
     C,
     I135: 0, // No iodine at cold shutdown
     Xe135: 0, // No xenon at cold shutdown
+    decayHeat: new Array(params.decayHeatFractions.length).fill(0), // No decay heat at cold shutdown
   };
 }

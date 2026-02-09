@@ -40,6 +40,9 @@ export interface ReactorState {
 
   /** Xenon-135 concentration [atoms/cm³] - strong neutron poison */
   Xe135: number;
+
+  /** Decay heat power by group [normalized to P_nominal, dimensionless] */
+  decayHeat: number[];
 }
 
 /**
@@ -60,12 +63,19 @@ export interface ControlInputs {
    */
   pumpOn: boolean;
   
-  /** 
+  /**
    * Emergency scram signal.
    * When true, initiates rapid control rod insertion regardless of 'rod' setting.
    * Models the reactor protection system (RPS) response.
    */
   scram: boolean;
+
+  /**
+   * Soluble boron concentration in primary coolant [ppm].
+   * Boron-10 absorbs neutrons, providing negative reactivity.
+   * 0 = no boron, typical range 0-2500 ppm.
+   */
+  boronConc: number;
 }
 
 /**
@@ -85,7 +95,10 @@ export interface ReactivityComponents {
   /** Xenon-135 reactivity feedback (negative) [Δk/k] */
   rhoXenon: number;
 
-  /** Total reactivity = rhoExt + rhoDoppler + rhoMod + rhoXenon [Δk/k] */
+  /** Soluble boron reactivity (negative) [Δk/k] */
+  rhoBoron: number;
+
+  /** Total reactivity = rhoExt + rhoDoppler + rhoMod + rhoXenon + rhoBoron [Δk/k] */
   rhoTotal: number;
 }
 

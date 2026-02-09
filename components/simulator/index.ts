@@ -7,3 +7,4 @@ export { default as PowerDisplay } from "./PowerDisplay";
 export { default as PowerHistoryGraph } from "./PowerHistoryGraph";
 export { default as TemperatureMetrics } from "./TemperatureMetrics";
 export { default as ReactivityPanel } from "./ReactivityPanel";
+export { default as BoronControl } from "./BoronControl";

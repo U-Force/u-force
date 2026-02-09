@@ -4,12 +4,14 @@ import React from "react";
 
 interface PowerDisplayProps {
   power: number;
+  decayHeat?: number;
   colorTheme?: "green" | "orange";
   children?: React.ReactNode;
 }
 
 export default function PowerDisplay({
   power,
+  decayHeat,
   colorTheme = "green",
   children,
 }: PowerDisplayProps) {
@@ -30,6 +32,12 @@ export default function PowerDisplay({
       <div style={styles.bar}>
         <div style={styles.barFill(power)} />
       </div>
+      {decayHeat !== undefined && (
+        <div style={styles.decayHeatRow}>
+          <span style={styles.decayHeatLabel}>DECAY HEAT</span>
+          <span style={styles.decayHeatValue}>{decayHeat.toFixed(2)}%</span>
+        </div>
+      )}
       {children}
     </div>
   );
@@ -107,6 +115,28 @@ const greenStyles = {
     background: power > 110 ? "#ff5555" : power > 105 ? "#ffaa00" : "#ff9900",
     transition: "width 0.1s, background 0.3s",
   }),
+  decayHeatRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "8px",
+    padding: "6px 10px",
+    background: "rgba(255, 170, 0, 0.08)",
+    borderRadius: "6px",
+    border: "1px solid rgba(255, 170, 0, 0.15)",
+  } as React.CSSProperties,
+  decayHeatLabel: {
+    fontSize: "10px",
+    letterSpacing: "1px",
+    color: "#ffaa00",
+    fontFamily: "'Inter', sans-serif",
+  } as React.CSSProperties,
+  decayHeatValue: {
+    fontSize: "13px",
+    fontWeight: "bold",
+    color: "#ffaa00",
+    fontFamily: "'Inter', sans-serif",
+  } as React.CSSProperties,
 };
 
 const orangeStyles = {
@@ -160,4 +190,24 @@ const orangeStyles = {
     background: power > 110 ? "#ff5555" : power > 105 ? "#ffaa00" : "#ff9900",
     transition: "width 0.1s, background 0.3s",
   }),
+  decayHeatRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "6px",
+    padding: "4px 8px",
+    background: "rgba(255, 153, 0, 0.1)",
+    borderRadius: "4px",
+  } as React.CSSProperties,
+  decayHeatLabel: {
+    fontSize: "10px",
+    letterSpacing: "1px",
+    color: "#ff9900",
+  } as React.CSSProperties,
+  decayHeatValue: {
+    fontSize: "12px",
+    fontWeight: "bold",
+    color: "#ff9900",
+    fontFamily: "monospace",
+  } as React.CSSProperties,
 };

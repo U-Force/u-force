@@ -29,11 +29,13 @@ export const normalStartupScenario: TrainingScenario = {
       C: [0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.05, // Rods mostly inserted
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 2,
   },

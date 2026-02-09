@@ -353,6 +353,74 @@ export const XENON_TIME_ACCELERATION: number = 500; // 500x faster for interacti
 export const SIGMA_F_MACRO: number = 0.1; // cm⁻¹
 
 // ============================================================================
+// DECAY HEAT PARAMETERS (3-group model)
+// ============================================================================
+
+/**
+ * Number of decay heat groups.
+ * 3 groups capture fast, medium, and slow fission product decay timescales.
+ */
+export const NUM_DECAY_HEAT_GROUPS: number = 3;
+
+/**
+ * Decay heat fractions per group.
+ * At equilibrium, group i contributes f_i × P to total decay heat.
+ * Sum = 0.066 (6.6% of operating power — typical PWR value).
+ * Units: [dimensionless]
+ */
+export const DECAY_HEAT_FRACTIONS: readonly number[] = [
+  0.030,   // Group 1: short-lived fission products
+  0.020,   // Group 2: medium-lived fission products
+  0.016,   // Group 3: long-lived fission products
+] as const;
+
+/**
+ * Decay constants for each decay heat group.
+ * λ_i = 1/τ_i where τ_i is the characteristic time.
+ * Units: [1/s]
+ */
+export const DECAY_HEAT_LAMBDAS: readonly number[] = [
+  0.1,      // Group 1: τ = 10s (fast decay)
+  0.01,     // Group 2: τ = 100s (medium decay)
+  0.0005,   // Group 3: τ = 2000s (slow decay)
+] as const;
+
+/**
+ * Decay heat time acceleration factor for educational purposes.
+ * Real decay heat evolves over minutes to days after shutdown.
+ * This factor speeds up dynamics while preserving equilibrium values.
+ *
+ * Units: [dimensionless multiplier]
+ */
+export const DECAY_HEAT_TIME_ACCELERATION: number = 5;
+
+// ============================================================================
+// SOLUBLE BORON PARAMETERS
+// ============================================================================
+
+/**
+ * Boron reactivity coefficient.
+ * Each ppm of boron-10 in coolant provides this much reactivity.
+ * Typical PWR: -5 to -15 pcm/ppm depending on burnup and enrichment.
+ * Units: [Δk/k per ppm]
+ */
+export const BORON_COEFF: number = -1.0e-4; // -10 pcm/ppm
+
+/**
+ * Default boron concentration for cold shutdown.
+ * Provides negative reactivity margin for safety.
+ * Units: [ppm]
+ */
+export const BORON_DEFAULT: number = 500;
+
+/**
+ * Maximum soluble boron concentration.
+ * Limited by boric acid solubility in water at operating temperature.
+ * Units: [ppm]
+ */
+export const BORON_MAX: number = 2500;
+
+// ============================================================================
 // PARAMETER PACK FOR EASY OVERRIDE
 // ============================================================================
 
@@ -401,6 +469,16 @@ export interface ReactorParams {
   xenonWorthEquilibrium: number;
   xenonTimeAcceleration: number;
 
+  // Decay heat (3-group model)
+  decayHeatFractions: readonly number[];
+  decayHeatLambdas: readonly number[];
+  decayHeatTimeAcceleration: number;
+
+  // Soluble boron
+  boronCoeff: number;
+  boronDefault: number;
+  boronMax: number;
+
   // Limits
   dtMin: number;
   dtMaxRk4: number;
@@ -441,6 +519,14 @@ export const DEFAULT_PARAMS: ReactorParams = {
   powerNominal: POWER_NOMINAL,
   
   shutdownMargin: SHUTDOWN_MARGIN,
+
+  decayHeatFractions: DECAY_HEAT_FRACTIONS,
+  decayHeatLambdas: DECAY_HEAT_LAMBDAS,
+  decayHeatTimeAcceleration: DECAY_HEAT_TIME_ACCELERATION,
+
+  boronCoeff: BORON_COEFF,
+  boronDefault: BORON_DEFAULT,
+  boronMax: BORON_MAX,
 
   gammaI: GAMMA_I,
   gammaXe: GAMMA_XE,

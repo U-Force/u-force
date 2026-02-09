@@ -13,6 +13,7 @@ import {
   SpeedControl,
   ControlRodSlider,
   PumpScramControls,
+  BoronControl,
   PowerDisplay,
   PowerHistoryGraph,
   TemperatureMetrics,
@@ -24,6 +25,7 @@ export default function SimulatorPage() {
     rod, setRod, pumpOn, setPumpOn, speed, setSpeed,
     isRunning, isPaused, state, reactivity, history,
     tripActive, tripReason, rodActual,
+    boronConc, boronActual, setBoronConc,
     handleStart, handlePause, handleResume, handleStop, handleScram,
     initializeModel,
   } = useReactorSimulation();
@@ -51,6 +53,7 @@ export default function SimulatorPage() {
   const fuelTemp = state ? state.Tf : 600;
   const coolantTemp = state ? state.Tc : 560;
   const simTime = state ? state.t : 0;
+  const decayHeatPercent = state ? state.decayHeat.reduce((sum, d) => sum + d, 0) * 100 : 0;
 
   return (
     <>
@@ -130,6 +133,13 @@ export default function SimulatorPage() {
               colorTheme="orange"
             />
 
+            <BoronControl
+              boronConc={boronConc}
+              boronActual={boronActual}
+              onBoronChange={setBoronConc}
+              colorTheme="orange"
+            />
+
             {/* Quick Guide */}
             <div style={hintBox}>
               <div style={hintTitle}>Quick Guide</div>
@@ -144,7 +154,7 @@ export default function SimulatorPage() {
 
           {/* Right Column - Displays */}
           <div style={displayColumn}>
-            <PowerDisplay power={power} colorTheme="orange" />
+            <PowerDisplay power={power} decayHeat={decayHeatPercent} colorTheme="orange" />
             <PowerHistoryGraph
               history={history}
               historyLength={HISTORY_LENGTH}

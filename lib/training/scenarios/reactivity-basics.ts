@@ -28,11 +28,13 @@ export const reactivityBasicsScenario: TrainingScenario = {
       C: [0.0001, 0.0001, 0.0001, 0.0001, 0.0001, 0.0001],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.2, // 20% withdrawal
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1,
   },

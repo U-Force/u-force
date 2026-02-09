@@ -29,11 +29,13 @@ export const pumpTripScenario: TrainingScenario = {
       C: [0.0008, 0.0007, 0.0006, 0.0005, 0.0004, 0.0003],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.65, // Rods withdrawn for power operation
       pumpOn: true, // Will trip at t=60s
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1, // Real-time for emergency
   },

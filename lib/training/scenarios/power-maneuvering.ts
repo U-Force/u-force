@@ -28,11 +28,13 @@ export const powerManeuveringScenario: TrainingScenario = {
       C: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.4,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1,
   },

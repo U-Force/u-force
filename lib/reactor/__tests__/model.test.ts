@@ -35,7 +35,7 @@ import type { ControlInputs } from '../types';
 // ============================================================================
 
 function createDefaultControls(overrides: Partial<ControlInputs> = {}): ControlInputs {
-  return { rod: 0.5, pumpOn: true, scram: false, ...overrides };
+  return { rod: 0.5, pumpOn: true, scram: false, boronConc: 0, ...overrides };
 }
 
 // ============================================================================
@@ -247,6 +247,7 @@ describe('Regression: Rod Insertion Decreases Power', () => {
       rod: t < stepTime ? rodPosition : newRodPosition,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     });
 
     const records = model.run(20, 0.05, controls, 0.5);
@@ -270,6 +271,7 @@ describe('Regression: Rod Insertion Decreases Power', () => {
       rod: t < stepTime ? rodPosition : newRodPosition,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     });
 
     const records = model.run(30, 0.02, controls, 0.1);
@@ -299,6 +301,7 @@ describe('Regression: Scram', () => {
       rod: rodPosition,
       pumpOn: true,
       scram: t >= scramTime,
+      boronConc: 0,
     });
 
     const records = model.run(15, 0.02, controls, 0.1);
@@ -317,6 +320,7 @@ describe('Regression: Scram', () => {
       rod: rodPosition,
       pumpOn: true,
       scram: t >= scramTime,
+      boronConc: 0,
     });
 
     const records = model.run(60, 0.05, controls, 0.5);
@@ -351,6 +355,7 @@ describe('Regression: Pump Off Heats Coolant', () => {
       rod: rodPosition,
       pumpOn: t < tripTime,
       scram: false,
+      boronConc: 0,
     });
 
     const records = model.run(60, 0.1, controls, 1.0);
@@ -367,13 +372,13 @@ describe('Regression: Pump Off Heats Coolant', () => {
     // Run with pump on
     const { state: state1, rodPosition } = createCriticalSteadyState(1.0, DEFAULT_PARAMS, true);
     const model1 = new ReactorModel(state1, DEFAULT_PARAMS);
-    const records1 = model1.run(30, 0.1, { rod: rodPosition, pumpOn: true, scram: false });
+    const records1 = model1.run(30, 0.1, { rod: rodPosition, pumpOn: true, scram: false, boronConc: 0 });
     const tcPumpOn = records1[records1.length - 1].Tc;
 
     // Run with pump off (from same starting point, different pump status)
     const state2 = createSteadyState(1.0, DEFAULT_PARAMS, false); // steady state with pump off
     const model2 = new ReactorModel(state2, DEFAULT_PARAMS);
-    const records2 = model2.run(30, 0.1, { rod: 0.8, pumpOn: false, scram: false });
+    const records2 = model2.run(30, 0.1, { rod: 0.8, pumpOn: false, scram: false, boronConc: 0 });
     const tcPumpOff = records2[records2.length - 1].Tc;
 
     // Pump off should result in higher coolant temp
@@ -425,6 +430,7 @@ describe('Numerical Stability', () => {
       rod: t < 1 ? rodPosition : t < 2 ? 1.0 : rodPosition,
       pumpOn: true,
       scram: t >= 3,
+      boronConc: 0,
     });
 
     const records = model.run(20, 0.02, controls);
@@ -446,7 +452,7 @@ describe('Edge Cases', () => {
     const state = createSteadyState(0, DEFAULT_PARAMS, true);
     const model = new ReactorModel(state, DEFAULT_PARAMS);
 
-    const controls: ControlInputs = { rod: 0, pumpOn: true, scram: false };
+    const controls: ControlInputs = { rod: 0, pumpOn: true, scram: false, boronConc: 0 };
     const records = model.run(10, 0.1, controls);
 
     // Power should stay at or near zero
@@ -460,7 +466,7 @@ describe('Edge Cases', () => {
     const state = createSteadyState(0.001, DEFAULT_PARAMS, true);
     const model = new ReactorModel(state, DEFAULT_PARAMS);
 
-    const controls: ControlInputs = { rod: 0.3, pumpOn: true, scram: false };
+    const controls: ControlInputs = { rod: 0.3, pumpOn: true, scram: false, boronConc: 0 };
     const records = model.run(10, 0.1, controls);
 
     for (const record of records) {

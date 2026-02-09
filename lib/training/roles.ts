@@ -11,6 +11,7 @@ export const ROLE_PERMISSIONS: Record<TrainingRole, RolePermissions> = {
     canScram: false, // Must request supervisor
     canBypassTrips: false,
     canControlPump: true,
+    canControlBoron: true,
     requiresApproval: true,
     showHints: true,
     showProcedures: true,
@@ -22,6 +23,7 @@ export const ROLE_PERMISSIONS: Record<TrainingRole, RolePermissions> = {
     canScram: true,
     canBypassTrips: false,
     canControlPump: true,
+    canControlBoron: true,
     requiresApproval: false,
     showHints: false,
     showProcedures: true,
@@ -33,6 +35,7 @@ export const ROLE_PERMISSIONS: Record<TrainingRole, RolePermissions> = {
     canScram: true,
     canBypassTrips: true, // Can bypass for testing
     canControlPump: true,
+    canControlBoron: true,
     requiresApproval: false,
     showHints: false,
     showProcedures: false, // Expected to know procedures
@@ -44,6 +47,7 @@ export const ROLE_PERMISSIONS: Record<TrainingRole, RolePermissions> = {
     canScram: false,
     canBypassTrips: false,
     canControlPump: false,
+    canControlBoron: false,
     requiresApproval: false,
     showHints: false,
     showProcedures: false,
@@ -55,6 +59,7 @@ export const ROLE_PERMISSIONS: Record<TrainingRole, RolePermissions> = {
     canScram: true,
     canBypassTrips: true,
     canControlPump: true,
+    canControlBoron: true,
     requiresApproval: false,
     showHints: false,
     showProcedures: false,

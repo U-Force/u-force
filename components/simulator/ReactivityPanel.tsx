@@ -44,6 +44,10 @@ export default function ReactivityPanel({
         <div style={styles.xenonNote}>
           <span style={{opacity: 0.6}}>⚡ Xenon dynamics accelerated 500× for simulation</span>
         </div>
+        <div style={styles.row}>
+          <span style={styles.label}>Soluble Boron</span>
+          <span style={styles.value}>{reactivity ? (reactivity.rhoBoron * 1e5).toFixed(0) : 0} pcm</span>
+        </div>
         <div style={styles.totalRow}>
           <span style={styles.label}>TOTAL</span>
           <span style={styles.totalValue(reactivity?.rhoTotal || 0)}>

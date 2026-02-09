@@ -28,6 +28,7 @@ import {
   SpeedControl,
   ControlRodSlider,
   PumpScramControls,
+  BoronControl,
   PowerDisplay,
   PowerHistoryGraph,
   TemperatureMetrics,
@@ -160,7 +161,8 @@ export default function TrainingPage() {
     isRunning, isPaused,
     state, reactivity, history,
     tripActive, tripReason, rodActual,
-    setRod, setPumpOn, setSpeed,
+    boronConc, boronActual,
+    setRod, setPumpOn, setBoronConc, setSpeed,
     handleStart, handlePause, handleResume,
     handleStop, handleScram, handleResetTrip,
     initializeModel,
@@ -215,6 +217,7 @@ export default function TrainingPage() {
   const fuelTemp = state ? state.Tf : 500;
   const coolantTemp = state ? state.Tc : 500;
   const simTime = state ? state.t : 0;
+  const decayHeatPercent = state ? state.decayHeat.reduce((sum, d) => sum + d, 0) * 100 : 0;
 
   // Render based on app state
   if (appState === 'selector') {
@@ -358,11 +361,18 @@ export default function TrainingPage() {
               pumpDisabled={!permissions.canControlPump}
               scramDisabled={!permissions.canScram}
             />
+
+            <BoronControl
+              boronConc={boronConc}
+              boronActual={boronActual}
+              onBoronChange={setBoronConc}
+              disabled={!permissions.canControlBoron}
+            />
           </div>
 
           {/* Center Column - Displays */}
           <div style={displayColumn}>
-            <PowerDisplay power={power} />
+            <PowerDisplay power={power} decayHeat={decayHeatPercent} />
 
             <PowerHistoryGraph
               history={history}

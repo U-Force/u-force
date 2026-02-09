@@ -13,8 +13,9 @@ import {
 const DT = 0.01; // 10ms timestep for smooth simulation
 const HISTORY_LENGTH = 500; // 5 seconds of history at 100 samples/s
 const ROD_SPEED = 0.05; // 5%/second max rod movement rate
+const BORON_RATE = 10; // 10 ppm/second max boron change rate
 
-export { DT, HISTORY_LENGTH, ROD_SPEED };
+export { DT, HISTORY_LENGTH, ROD_SPEED, BORON_RATE };
 
 export interface HistoryPoint {
   t: number;
@@ -22,6 +23,7 @@ export interface HistoryPoint {
   Tf: number;
   Tc: number;
   rho: number;
+  decayHeatPercent: number;
 }
 
 /** Current control snapshot passed to callbacks. */
@@ -30,6 +32,7 @@ export interface ControlSnapshot {
   pumpOn: boolean;
   scram: boolean;
   tripActive: boolean;
+  boronConc: number;
 }
 
 /** Callback invoked after each animation frame with the latest state. */
@@ -63,10 +66,13 @@ export interface SimulationControls {
   tripActive: boolean;
   tripReason: string | null;
   rodActual: number;
+  boronConc: number;
+  boronActual: number;
 
   // Actions
   setRod: (v: number | ((prev: number) => number)) => void;
   setPumpOn: (v: boolean | ((prev: boolean) => boolean)) => void;
+  setBoronConc: (v: number | ((prev: number) => number)) => void;
   setSpeed: (v: number) => void;
   handleStart: () => void;
   handlePause: () => void;
@@ -75,7 +81,7 @@ export interface SimulationControls {
   handleScram: () => void;
   handleResetTrip: () => void;
   handleReset: () => void;
-  initializeModel: (initialState?: ReactorState, initialRod?: number, initialSpeed?: number) => void;
+  initializeModel: (initialState?: ReactorState, initialRod?: number, initialSpeed?: number, initialBoron?: number) => void;
 }
 
 export function useReactorSimulation(
@@ -88,6 +94,8 @@ export function useReactorSimulation(
   const [pumpOn, setPumpOn] = useState(true);
   const [scram, setScram] = useState(false);
   const [speed, setSpeed] = useState(0.5);
+  const [boronConc, setBoronConc] = useState(0);
+  const [boronActual, setBoronActual] = useState(0);
 
   // Simulation states
   const [isRunning, setIsRunning] = useState(false);
@@ -110,6 +118,8 @@ export function useReactorSimulation(
   const pumpRef = useRef(pumpOn);
   const scramRef = useRef(scram);
   const rodActualRef = useRef(0.0);
+  const boronRef = useRef(boronConc);
+  const boronActualRef = useRef(0.0);
 
   // Keep callback refs fresh
   const onTickRef = useRef(onTick);
@@ -123,6 +133,7 @@ export function useReactorSimulation(
   useEffect(() => { rodRef.current = rod; }, [rod]);
   useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
   useEffect(() => { scramRef.current = scram; }, [scram]);
+  useEffect(() => { boronRef.current = boronConc; }, [boronConc]);
 
   // Protection system check
   const checkTrips = useCallback(
@@ -143,9 +154,10 @@ export function useReactorSimulation(
 
   // Initialize model
   const initializeModel = useCallback(
-    (initialState?: ReactorState, initialRod?: number, initialSpeed?: number) => {
+    (initialState?: ReactorState, initialRod?: number, initialSpeed?: number, initialBoron?: number) => {
       const reactorState = initialState ?? createColdShutdownState(DEFAULT_PARAMS);
       const rodPos = initialRod ?? 0.0;
+      const boron = initialBoron ?? 0;
 
       modelRef.current = new ReactorModel(reactorState, DEFAULT_PARAMS);
       setState(reactorState);
@@ -153,12 +165,18 @@ export function useReactorSimulation(
       rodRef.current = rodPos;
       rodActualRef.current = rodPos;
       setRodActual(rodPos);
+      setBoronConc(boron);
+      boronRef.current = boron;
+      boronActualRef.current = boron;
+      setBoronActual(boron);
       setScram(false);
       scramRef.current = false;
       setPumpOn(true);
       pumpRef.current = true;
       setTripActive(false);
       setTripReason(null);
+
+      const totalDecayHeat = reactorState.decayHeat.reduce((sum, d) => sum + d, 0);
       setHistory([
         {
           t: 0,
@@ -166,6 +184,7 @@ export function useReactorSimulation(
           Tf: reactorState.Tf,
           Tc: reactorState.Tc,
           rho: 0,
+          decayHeatPercent: totalDecayHeat * 100,
         },
       ]);
 
@@ -173,7 +192,7 @@ export function useReactorSimulation(
         setSpeed(initialSpeed);
       }
 
-      const controls: ControlInputs = { rod: rodPos, pumpOn: true, scram: false };
+      const controls: ControlInputs = { rod: rodPos, pumpOn: true, scram: false, boronConc: boron };
       const rho = modelRef.current.getReactivity(controls);
       setReactivity(rho);
     },
@@ -215,11 +234,20 @@ export function useReactorSimulation(
         rodActualNow +
         Math.max(-maxDelta, Math.min(maxDelta, rodTarget - rodActualNow));
 
+      // Rate-limit boron changes
+      const boronTarget = boronRef.current;
+      const boronActualNow = boronActualRef.current;
+      const maxBoronDelta = BORON_RATE * simDelta;
+      boronActualRef.current =
+        boronActualNow +
+        Math.max(-maxBoronDelta, Math.min(maxBoronDelta, boronTarget - boronActualNow));
+
       let currentScram = scramRef.current;
       const controls: ControlInputs = {
         rod: rodActualRef.current,
         pumpOn: pumpRef.current,
         scram: currentScram,
+        boronConc: boronActualRef.current,
       };
 
       try {
@@ -246,6 +274,7 @@ export function useReactorSimulation(
                 pumpOn: pumpRef.current,
                 scram: true,
                 tripActive: true,
+                boronConc: boronActualRef.current,
               });
             }
           }
@@ -269,6 +298,7 @@ export function useReactorSimulation(
       setState(currentState);
       setReactivity(currentReactivity);
       setRodActual(rodActualRef.current);
+      setBoronActual(boronActualRef.current);
 
       // Notify consumer
       onTickRef.current?.(currentState, currentReactivity, {
@@ -276,9 +306,11 @@ export function useReactorSimulation(
         pumpOn: pumpRef.current,
         scram: scramRef.current,
         tripActive,
+        boronConc: boronActualRef.current,
       }, simDelta);
 
       // Update history
+      const totalDH = currentState.decayHeat.reduce((sum, d) => sum + d, 0);
       setHistory((prev) => {
         const newPoint: HistoryPoint = {
           t: currentState.t,
@@ -286,6 +318,7 @@ export function useReactorSimulation(
           Tf: currentState.Tf,
           Tc: currentState.Tc,
           rho: currentReactivity.rhoTotal,
+          decayHeatPercent: totalDH * 100,
         };
         const updated = [...prev, newPoint];
         return updated.slice(-HISTORY_LENGTH);
@@ -367,8 +400,11 @@ export function useReactorSimulation(
     tripActive,
     tripReason,
     rodActual,
+    boronConc,
+    boronActual,
     setRod,
     setPumpOn,
+    setBoronConc,
     setSpeed,
     handleStart,
     handlePause,

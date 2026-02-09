@@ -28,11 +28,13 @@ export const feedwaterLossScenario: TrainingScenario = {
       C: [0.002, 0.002, 0.002, 0.002, 0.002, 0.002],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.65,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1,
   },

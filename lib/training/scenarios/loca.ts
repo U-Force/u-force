@@ -28,11 +28,13 @@ export const locaScenario: TrainingScenario = {
       C: [0.003, 0.003, 0.003, 0.003, 0.003, 0.003],
       I135: 0,
       Xe135: 0,
+      decayHeat: [0, 0, 0],
     },
     controls: {
       rod: 0.75,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     },
     timeAcceleration: 1,
   },

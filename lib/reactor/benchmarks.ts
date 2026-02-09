@@ -48,6 +48,7 @@ export function runSteadyHold(
     rod: rodPosition,
     pumpOn: true,
     scram: false,
+    boronConc: 0,
   };
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -88,6 +89,7 @@ export function runRodInsertion(
     rod: t < stepTime ? rodPosition : newRodPosition,
     pumpOn: true,
     scram: false,
+    boronConc: 0,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -128,6 +130,7 @@ export function runRodWithdrawal(
     rod: t < stepTime ? rodPosition : newRodPosition,
     pumpOn: true,
     scram: false,
+    boronConc: 0,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -167,6 +170,7 @@ export function runScram(
     rod: rodPosition, // Rod position doesn't matter during scram
     pumpOn: true,
     scram: t >= scramTime,
+    boronConc: 0,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.2);
@@ -205,6 +209,7 @@ export function runPumpTrip(
     rod: rodPosition,
     pumpOn: t < tripTime,
     scram: false,
+    boronConc: 0,
   });
   
   const timeSeries = model.run(duration, dt, controls, 1.0);
@@ -255,9 +260,10 @@ export function runRodRamp(
       rod,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     };
   };
-  
+
   const timeSeries = model.run(totalDuration, dt, controls, 0.5);
   
   return {
@@ -305,9 +311,10 @@ export function runStartup(
       rod,
       pumpOn: true,
       scram: false,
+      boronConc: 0,
     };
   };
-  
+
   const timeSeries = model.run(duration, dt, controls, 2.0);
   
   return {

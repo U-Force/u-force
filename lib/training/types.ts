@@ -23,6 +23,7 @@ export interface RolePermissions {
   canScram: boolean;
   canBypassTrips: boolean;
   canControlPump: boolean;
+  canControlBoron: boolean;
   requiresApproval: boolean;
   showHints: boolean;
   showProcedures: boolean;

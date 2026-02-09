@@ -110,16 +110,23 @@ export function validateTimestep(
  */
 export function validateControls(controls: ControlInputs): void {
   validateRodPosition(controls.rod);
-  
+
   if (typeof controls.pumpOn !== 'boolean') {
     throw new ValidationError(
       `pumpOn must be a boolean, got: ${typeof controls.pumpOn}`
     );
   }
-  
+
   if (typeof controls.scram !== 'boolean') {
     throw new ValidationError(
       `scram must be a boolean, got: ${typeof controls.scram}`
+    );
+  }
+
+  assertFinite(controls.boronConc, 'Boron concentration');
+  if (controls.boronConc < 0) {
+    throw new BoundsError(
+      `Boron concentration must be non-negative, got: ${controls.boronConc}`
     );
   }
 }
@@ -134,9 +141,13 @@ export function validateStateFinite(state: ReactorState): void {
   assertFinite(state.P, 'Power P');
   assertFinite(state.Tf, 'Fuel temperature Tf');
   assertFinite(state.Tc, 'Coolant temperature Tc');
-  
+
   state.C.forEach((c, i) => {
     assertFinite(c, `Precursor concentration C[${i}]`);
+  });
+
+  state.decayHeat.forEach((d, i) => {
+    assertFinite(d, `Decay heat group D[${i}]`);
   });
 }
 
@@ -323,7 +334,17 @@ export function clampState(
       state.C[i] = 0;
     }
   }
-  
+
+  // Clamp decay heat groups (must be non-negative)
+  for (let i = 0; i < state.decayHeat.length; i++) {
+    if (state.decayHeat[i] < 0) {
+      warn(
+        `[t=${state.t.toFixed(3)}s] Decay heat D[${i}] clamped from ${state.decayHeat[i].toExponential(3)} to 0`
+      );
+      state.decayHeat[i] = 0;
+    }
+  }
+
   return result;
 }
 
@@ -379,6 +400,14 @@ export function validateInitialState(
     if (state.C[i] < 0) {
       throw new ValidationError(
         `Initial precursor C[${i}] must be non-negative, got: ${state.C[i]}`
+      );
+    }
+  }
+
+  for (let i = 0; i < state.decayHeat.length; i++) {
+    if (state.decayHeat[i] < 0) {
+      throw new ValidationError(
+        `Initial decay heat D[${i}] must be non-negative, got: ${state.decayHeat[i]}`
       );
     }
   }

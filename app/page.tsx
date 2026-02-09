@@ -13,6 +13,7 @@ import {
   SpeedControl,
   ControlRodSlider,
   PumpScramControls,
+  BoronControl,
   PowerDisplay,
   PowerHistoryGraph,
   TemperatureMetrics,
@@ -28,7 +29,8 @@ export default function SimulatorPage() {
     isRunning, isPaused,
     state, reactivity, history,
     tripActive, tripReason, rodActual,
-    setRod, setPumpOn, setSpeed,
+    boronConc, boronActual,
+    setRod, setPumpOn, setBoronConc, setSpeed,
     handleStart, handlePause, handleResume,
     handleStop, handleScram, handleResetTrip, handleReset,
     initializeModel,
@@ -50,6 +52,7 @@ export default function SimulatorPage() {
   const fuelTemp = state ? state.Tf : 500;
   const coolantTemp = state ? state.Tc : 500;
   const simTime = state ? state.t : 0;
+  const decayHeatPercent = state ? state.decayHeat.reduce((sum, d) => sum + d, 0) * 100 : 0;
 
   return (
     <>
@@ -197,6 +200,20 @@ export default function SimulatorPage() {
               )}
             </PumpScramControls>
 
+            <BoronControl
+              boronConc={boronConc}
+              boronActual={boronActual}
+              onBoronChange={setBoronConc}
+            >
+              {learningMode && (
+                <div style={learningHint}>
+                  💡 <strong>Soluble Boron:</strong> Boric acid dissolved in coolant absorbs neutrons for long-term
+                  reactivity control. Increasing boron adds negative reactivity. Real PWRs use boron to compensate
+                  for fuel burnup over months of operation.
+                </div>
+              )}
+            </BoronControl>
+
             {/* Quick Guide */}
             <div style={hintBox}>
               <div style={hintTitle}>Quick Guide</div>
@@ -212,7 +229,7 @@ export default function SimulatorPage() {
 
           {/* Right Column - Displays */}
           <div style={displayColumn}>
-            <PowerDisplay power={power}>
+            <PowerDisplay power={power} decayHeat={decayHeatPercent}>
               {learningMode && (
                 <div style={{...learningHint, marginTop: "12px"}}>
                   💡 <strong>Reactor Power:</strong> Shows how much thermal energy the reactor is producing.

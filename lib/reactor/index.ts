@@ -36,6 +36,13 @@ export {
   rodWorthCurve,
   createParams,
   SIGMA_F_MACRO,
+  DECAY_HEAT_FRACTIONS,
+  DECAY_HEAT_LAMBDAS,
+  DECAY_HEAT_TIME_ACCELERATION,
+  NUM_DECAY_HEAT_GROUPS,
+  BORON_COEFF,
+  BORON_DEFAULT,
+  BORON_MAX,
 } from './params';
 
 // Model
@@ -50,6 +57,7 @@ export {
   computeModeratorReactivity,
   computeDerivatives,
   computeExternalReactivity,
+  computeBoronReactivity,
 } from './model';
 
 // Guards
