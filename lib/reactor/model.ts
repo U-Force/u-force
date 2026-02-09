@@ -52,6 +52,7 @@ import {
   DEFAULT_PARAMS,
   rodWorthCurve,
   BETA_TOTAL,
+  SIGMA_F_MACRO,
 } from './params';
 
 import {
@@ -149,8 +150,7 @@ export function computeXenonReactivity(Xe135: number, params: ReactorParams): nu
   // Flux at full power: 3.5e13 n/cm²/s
   // Macroscopic fission cross-section: ~0.1 cm⁻¹
   const phi_nominal = params.fluxNominal; // 3.5e13 n/cm²/s
-  const Sigma_f = 0.1; // cm⁻¹ (typical PWR)
-  const fission_rate = phi_nominal * Sigma_f; // fissions/cm³/s
+  const fission_rate = phi_nominal * SIGMA_F_MACRO; // fissions/cm³/s
 
   const lambda_I = params.lambdaI135;
   const lambda_Xe = params.lambdaXe135;
@@ -313,9 +313,7 @@ export function computeDerivatives(
   const flux = params.fluxNominal * P;
 
   // Fission rate: φ × Σ_f [fissions/cm³/s]
-  // Using typical PWR macroscopic fission cross-section
-  const Sigma_f = 0.1; // cm⁻¹ (typical PWR value)
-  const fissionRate = flux * Sigma_f; // fissions/cm³/s
+  const fissionRate = flux * SIGMA_F_MACRO; // fissions/cm³/s
 
   // I-135 production and decay
   // dI/dt = γ_I * fission_rate - λ_I * I
@@ -728,8 +726,7 @@ export function createSteadyState(
   // At steady state for Xe-135: dXe/dt = 0
   // Xe_eq = (γ_Xe * fission_rate + λ_I * I_eq) / (λ_Xe + σ_Xe * flux)
   const flux = params.fluxNominal * P;
-  const Sigma_f = 0.1; // cm⁻¹ (typical PWR)
-  const fissionRate = flux * Sigma_f; // fissions/cm³/s
+  const fissionRate = flux * SIGMA_F_MACRO; // fissions/cm³/s
 
   const I_eq = (params.gammaI * fissionRate) / params.lambdaI135;
 
@@ -823,4 +820,36 @@ export function createCriticalSteadyState(
   }
   
   return { state, rodPosition };
+}
+
+/**
+ * Creates a cold shutdown initial state.
+ *
+ * Cold shutdown means near-zero power, cold temperatures, no xenon/iodine,
+ * and rods fully inserted. Precursor concentrations are set to equilibrium
+ * at the (tiny) initial power level.
+ *
+ * @param params Reactor parameters
+ * @returns Cold shutdown reactor state
+ */
+export function createColdShutdownState(
+  params: ReactorParams = DEFAULT_PARAMS
+): ReactorState {
+  const P = 1e-8; // Essentially zero power
+  const coldTemp = params.TcInlet; // Cold shutdown temperature
+
+  // Equilibrium precursors for this tiny power: C_i = (β_i / (Λ * λ_i)) * P
+  const C = params.betaI.map((betaI, i) =>
+    (betaI / (params.lambdaPrompt * params.lambdaI[i])) * P
+  );
+
+  return {
+    t: 0,
+    P,
+    Tf: coldTemp,
+    Tc: coldTemp,
+    C,
+    I135: 0, // No iodine at cold shutdown
+    Xe135: 0, // No xenon at cold shutdown
+  };
 }

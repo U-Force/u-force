@@ -1,13 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import {
-  ReactorModel,
-  DEFAULT_PARAMS,
-  type ControlInputs,
-  type ReactorState,
-  type ReactivityComponents,
-} from "../../lib/reactor";
+import React, { useState, useRef, useCallback } from "react";
+import type { ReactorState, ReactivityComponents } from "../../lib/reactor";
 import {
   SCENARIOS,
   TrainingRole,
@@ -23,18 +17,10 @@ import ScenarioDebrief from "../../components/ScenarioDebrief";
 import TrainingModulesSidebar from "../../components/TrainingModulesSidebar";
 import NavigationBar from "../../components/NavigationBar";
 import { LiveCheckpointPanel } from "../../components/LiveCheckpointPanel";
-
-const DT = 0.01; // 10ms timestep
-const HISTORY_LENGTH = 500; // 5 seconds of history
-const ROD_SPEED = 0.05; // 5%/second max rod movement rate
-
-interface HistoryPoint {
-  t: number;
-  P: number;
-  Tf: number;
-  Tc: number;
-  rho: number;
-}
+import {
+  useReactorSimulation,
+  HISTORY_LENGTH,
+} from "../../hooks/useReactorSimulation";
 
 type AppState = 'selector' | 'briefing' | 'running' | 'debrief';
 
@@ -44,23 +30,6 @@ export default function TrainingPage() {
   const [selectedScenario, setSelectedScenario] = useState<TrainingScenario | null>(null);
   const [currentRole, setCurrentRole] = useState<TrainingRole>(TrainingRole.RO);
   const [metricsCollector, setMetricsCollector] = useState<MetricsCollector | null>(null);
-
-  // Control states
-  const [rod, setRod] = useState(0.05);
-  const [pumpOn, setPumpOn] = useState(true);
-  const [scram, setScram] = useState(false);
-  const [speed, setSpeed] = useState(0.5); // Start at 0.5x speed - balanced pace
-  const [learningMode, setLearningMode] = useState(false); // Learning hints toggle
-
-  // Simulation states
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [state, setState] = useState<ReactorState | null>(null);
-  const [reactivity, setReactivity] = useState<ReactivityComponents | null>(null);
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
-  const [tripActive, setTripActive] = useState(false);
-  const [tripReason, setTripReason] = useState<string | null>(null);
-  const [rodActual, setRodActual] = useState(0.05); // Actual rod position (rate-limited)
 
   // Real-time metrics for checkpoint evaluation
   const [liveMetrics, setLiveMetrics] = useState({
@@ -84,313 +53,109 @@ export default function TrainingPage() {
   const lastRodTimestampRef = useRef(0);
   const lastPowerRef = useRef(0);
 
-  // Refs
-  const modelRef = useRef<ReactorModel | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number>(0);
-  const accumulatedRef = useRef<number>(0);
-  const scenarioTimeRef = useRef<number>(0);
+  // Refs for metrics collector (avoid stale closures)
+  const metricsCollectorRef = useRef(metricsCollector);
+  metricsCollectorRef.current = metricsCollector;
+  const selectedScenarioRef = useRef(selectedScenario);
+  selectedScenarioRef.current = selectedScenario;
 
-  // Refs for real-time controls (avoid stale closures)
-  const rodRef = useRef(rod);
-  const pumpRef = useRef(pumpOn);
-  const scramRef = useRef(scram);
-  const rodActualRef = useRef(rod); // Actual rod position sent to model (rate-limited)
+  // onTick callback for training-specific metric recording
+  const handleTick = useCallback(
+    (currentState: ReactorState, _reactivity: ReactivityComponents, controls: { rod: number; pumpOn: boolean; scram: boolean; tripActive: boolean }, _simDelta: number) => {
+      const collector = metricsCollectorRef.current;
+      const scenario = selectedScenarioRef.current;
 
-  // Keep refs in sync with state
-  useEffect(() => { rodRef.current = rod; }, [rod]);
-  useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
-  useEffect(() => { scramRef.current = scram; }, [scram]);
+      // Record metrics if in training mode
+      if (collector) {
+        collector.recordState(currentState, controls.rod, controls.pumpOn, controls.scram);
+      }
+
+      // Update live metrics for checkpoint evaluation
+      if (scenario) {
+        const currentPowerPercent = currentState.P * 100;
+
+        // Calculate rod withdrawal rate
+        const rodDelta = controls.rod - lastRodPositionRef.current;
+        const timeDelta = currentState.t - lastRodTimestampRef.current;
+        const rodRate = timeDelta > 0 ? Math.abs(rodDelta * 100 / (timeDelta / 60)) : 0;
+
+        if (rodDelta !== 0) {
+          lastRodPositionRef.current = controls.rod;
+          lastRodTimestampRef.current = currentState.t;
+        }
+
+        const powerChanged = Math.abs(currentPowerPercent - lastPowerRef.current) > 5;
+        if (powerChanged) {
+          lastPowerRef.current = currentPowerPercent;
+        }
+
+        setLiveMetrics(prev => ({
+          timeElapsed: currentState.t,
+          tripCount: controls.tripActive ? prev.tripCount + (prev.tripCount === 0 ? 1 : 0) : prev.tripCount,
+          scramCount: controls.scram ? prev.scramCount + (prev.scramCount === 0 ? 1 : 0) : prev.scramCount,
+          maxPower: Math.max(prev.maxPower, currentPowerPercent),
+          maxFuelTemp: Math.max(prev.maxFuelTemp, currentState.Tf),
+          maxCoolantTemp: Math.max(prev.maxCoolantTemp, currentState.Tc),
+          currentPower: currentPowerPercent,
+          rodPosition: controls.rod * 100,
+          rodWithdrawalRate: rodRate,
+          timeToFirstCriticality:
+            prev.timeToFirstCriticality === -1 && currentState.P > 0.001
+              ? currentState.t
+              : prev.timeToFirstCriticality,
+          powerChangeCount: prev.powerChangeCount + (powerChanged ? 1 : 0),
+          observationTime: currentState.t,
+          finalPower: currentPowerPercent,
+          timeAt50Percent: collector ? collector.getLiveMetricValue('timeAt50Percent') : 0,
+          maxPowerRate: collector ? collector.getLiveMetricValue('maxPowerRate') : 0,
+        }));
+      }
+    },
+    [] // Uses refs to avoid stale closures
+  );
+
+  const handleTrip = useCallback(
+    (tripState: ReactorState, _reason: string, controls: { rod: number; pumpOn: boolean; scram: boolean; tripActive: boolean }) => {
+      const collector = metricsCollectorRef.current;
+      if (collector) {
+        collector.recordState(tripState, 0, controls.pumpOn, true);
+      }
+    },
+    []
+  );
+
+  const handleSimStop = useCallback((finalState: ReactorState | null) => {
+    const collector = metricsCollectorRef.current;
+    const scenario = selectedScenarioRef.current;
+
+    if (collector && scenario && finalState) {
+      const finalMetrics = collector.finalize(finalState, scenario);
+      if (finalMetrics.success) {
+        markScenarioCompleted(scenario.id);
+      }
+      setAppState('debrief');
+    }
+  }, []);
+
+  const sim = useReactorSimulation({
+    onTick: handleTick,
+    onTrip: handleTrip,
+    onStop: handleSimStop,
+  });
+
+  const {
+    rod, pumpOn, speed,
+    isRunning, isPaused,
+    state, reactivity, history,
+    tripActive, tripReason, rodActual,
+    setRod, setPumpOn, setSpeed,
+    handleStart, handlePause, handleResume,
+    handleStop, handleScram, handleResetTrip,
+    initializeModel,
+  } = sim;
 
   // Get role permissions
   const permissions = getRolePermissions(currentRole);
-
-  // Initialize model for scenario or free play
-  const initializeModel = useCallback((scenario?: TrainingScenario) => {
-    try {
-      let initialState: ReactorState;
-      let initialRod: number;
-
-      if (scenario) {
-        initialState = scenario.initialState.reactorState;
-        initialRod = scenario.initialState.controls.rod;
-        setSpeed(scenario.initialState.timeAcceleration);
-      } else {
-        // Free play mode - start in TRUE COLD SHUTDOWN (subcritical, stable)
-        const initialPower = 1e-8; // Essentially zero power (shutdown)
-        const coldTemp = 300; // Cold shutdown temperature (K)
-
-        // Calculate equilibrium precursor concentrations for this tiny power
-        const beta = [0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027];
-        const lambda = [0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01];
-        const Lambda = 1e-3; // MUST MATCH params.ts LAMBDA_PROMPT
-
-        const precursors = beta.map((b, i) => (b / lambda[i]) * (initialPower / Lambda));
-
-        initialState = {
-          t: 0,
-          P: initialPower,
-          Tf: coldTemp,
-          Tc: coldTemp,
-          C: precursors,
-          I135: 0, // No xenon at cold shutdown
-          Xe135: 0,
-        };
-        initialRod = 0.0; // Start with rods fully inserted (0%) - truly shutdown
-      }
-
-      modelRef.current = new ReactorModel(initialState, DEFAULT_PARAMS);
-      setState(initialState);
-      setRod(initialRod);
-      rodRef.current = initialRod;
-      rodActualRef.current = initialRod;
-      setRodActual(initialRod);
-      setScram(false);
-      scramRef.current = false;
-      setPumpOn(true);
-      pumpRef.current = true;
-      setTripActive(false);
-      setTripReason(null);
-      setHistory([{
-        t: 0,
-        P: initialState.P,
-        Tf: initialState.Tf,
-        Tc: initialState.Tc,
-        rho: 0,
-      }]);
-
-      const controls: ControlInputs = { rod: initialRod, pumpOn: true, scram: false };
-      const rho = modelRef.current.getReactivity(controls);
-      setReactivity(rho);
-
-      scenarioTimeRef.current = 0;
-
-      if (!scenario) {
-        console.log(`Initialized in cold shutdown: P=${initialState.P}, T=${initialState.Tf}K, rod=${initialRod*100}%, rho=${(rho.rhoTotal*1e5).toFixed(0)} pcm`);
-      }
-    } catch (error) {
-      console.error("Initialization error:", error);
-    }
-  }, []);
-
-  // Protection system check
-  const checkTrips = useCallback((currentState: ReactorState): { trip: boolean; reason: string | null } => {
-    if (currentState.P > 1.1) {
-      return { trip: true, reason: "HIGH POWER >110%" };
-    }
-    if (currentState.Tf > 1800) {
-      return { trip: true, reason: "HIGH FUEL TEMP >1800K" };
-    }
-    if (currentState.Tc > 620) {
-      return { trip: true, reason: "HIGH COOLANT TEMP >620K" };
-    }
-    return { trip: false, reason: null };
-  }, []);
-
-  // Animation loop
-  const tick = useCallback((timestamp: number) => {
-    if (!modelRef.current) {
-      animationRef.current = requestAnimationFrame(tick);
-      return;
-    }
-
-    // PAUSE: Don't update simulation, but keep loop running for responsiveness
-    if (isPaused) {
-      lastTimeRef.current = 0; // Reset time on unpause
-      animationRef.current = requestAnimationFrame(tick);
-      return;
-    }
-
-    if (lastTimeRef.current === 0) {
-      lastTimeRef.current = timestamp;
-    }
-
-    const deltaMs = timestamp - lastTimeRef.current;
-    lastTimeRef.current = timestamp;
-
-    const simDelta = (deltaMs / 1000) * speed;
-    accumulatedRef.current += simDelta;
-    scenarioTimeRef.current += simDelta;
-
-    const stepsNeeded = Math.floor(accumulatedRef.current / DT);
-    accumulatedRef.current -= stepsNeeded * DT;
-
-    // Rate-limit rod movement
-    const rodTarget = rodRef.current;
-    const rodActualNow = rodActualRef.current;
-    const maxDelta = ROD_SPEED * simDelta;
-    rodActualRef.current = rodActualNow + Math.max(-maxDelta, Math.min(maxDelta, rodTarget - rodActualNow));
-
-    // Use refs for real-time control values
-    let currentScram = scramRef.current;
-    const controls: ControlInputs = {
-      rod: rodActualRef.current,
-      pumpOn: pumpRef.current,
-      scram: currentScram
-    };
-
-    try {
-      for (let i = 0; i < stepsNeeded; i++) {
-        const newState = modelRef.current.step(DT, { ...controls, scram: currentScram });
-
-        // Check protection system
-        if (!tripActive && !currentScram) {
-          const { trip, reason } = checkTrips(newState);
-          if (trip) {
-            setTripActive(true);
-            setTripReason(reason);
-            setScram(true);
-            scramRef.current = true;
-            setRod(0); // Auto-trip: Insert all rods
-            rodRef.current = 0;
-            rodActualRef.current = 0; // Trip bypasses rate limit
-            currentScram = true;
-
-            // Record trip in metrics
-            if (metricsCollector) {
-              metricsCollector.recordState(newState, rodRef.current, pumpRef.current, true);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Simulation error:", error);
-      setTripActive(true);
-      setTripReason("SIMULATION ERROR");
-      setScram(true);
-      scramRef.current = true;
-      setRod(0); // Error: Insert all rods
-      rodRef.current = 0;
-      rodActualRef.current = 0;
-      handleStop();
-      return;
-    }
-
-    const currentState = modelRef.current.getState();
-    const currentReactivity = modelRef.current.getReactivity(controls);
-
-    setState(currentState);
-    setReactivity(currentReactivity);
-    setRodActual(rodActualRef.current);
-
-    // Record metrics if in training mode
-    if (metricsCollector) {
-      metricsCollector.recordState(currentState, rodRef.current, pumpRef.current, scramRef.current);
-    }
-
-    // Update live metrics for checkpoint evaluation
-    if (selectedScenario) {
-      const currentPowerPercent = currentState.P * 100;
-
-      // Calculate rod withdrawal rate
-      const rodDelta = rodRef.current - lastRodPositionRef.current;
-      const timeDelta = currentState.t - lastRodTimestampRef.current;
-      const rodRate = timeDelta > 0 ? Math.abs(rodDelta * 100 / (timeDelta / 60)) : 0; // %/minute
-
-      if (rodDelta !== 0) {
-        lastRodPositionRef.current = rodRef.current;
-        lastRodTimestampRef.current = currentState.t;
-      }
-
-      // Track power changes (significant changes > 5%)
-      const powerChanged = Math.abs(currentPowerPercent - lastPowerRef.current) > 5;
-      if (powerChanged) {
-        lastPowerRef.current = currentPowerPercent;
-      }
-
-      setLiveMetrics(prev => ({
-        timeElapsed: currentState.t,
-        tripCount: tripActive ? prev.tripCount + (prev.tripCount === 0 ? 1 : 0) : prev.tripCount,
-        scramCount: scramRef.current ? prev.scramCount + (prev.scramCount === 0 ? 1 : 0) : prev.scramCount,
-        maxPower: Math.max(prev.maxPower, currentPowerPercent),
-        maxFuelTemp: Math.max(prev.maxFuelTemp, currentState.Tf),
-        maxCoolantTemp: Math.max(prev.maxCoolantTemp, currentState.Tc),
-        currentPower: currentPowerPercent,
-        rodPosition: rodRef.current * 100,
-        rodWithdrawalRate: rodRate,
-        timeToFirstCriticality:
-          prev.timeToFirstCriticality === -1 && currentState.P > 0.001
-            ? currentState.t
-            : prev.timeToFirstCriticality,
-        powerChangeCount: prev.powerChangeCount + (powerChanged ? 1 : 0),
-        observationTime: currentState.t,
-        finalPower: currentPowerPercent,
-        timeAt50Percent: metricsCollector ? metricsCollector.getLiveMetricValue('timeAt50Percent') : 0,
-        maxPowerRate: metricsCollector ? metricsCollector.getLiveMetricValue('maxPowerRate') : 0,
-      }));
-    }
-
-    // Update history
-    setHistory(prev => {
-      const newPoint: HistoryPoint = {
-        t: currentState.t,
-        P: currentState.P,
-        Tf: currentState.Tf,
-        Tc: currentState.Tc,
-        rho: currentReactivity.rhoTotal,
-      };
-      const updated = [...prev, newPoint];
-      return updated.slice(-HISTORY_LENGTH);
-    });
-
-    animationRef.current = requestAnimationFrame(tick);
-  }, [isPaused, speed, tripActive, checkTrips, metricsCollector]);
-
-  // Start/Stop handlers
-  const handleStart = () => {
-    setIsRunning(true);
-    setIsPaused(false);
-    lastTimeRef.current = 0;
-    animationRef.current = requestAnimationFrame(tick);
-  };
-
-  const handlePause = () => {
-    setIsPaused(true);
-  };
-
-  const handleResume = () => {
-    setIsPaused(false);
-    lastTimeRef.current = 0;
-  };
-
-  const handleStop = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    setIsRunning(false);
-    setIsPaused(false);
-
-    // Finalize metrics if in training mode
-    if (metricsCollector && selectedScenario && state) {
-      const finalMetrics = metricsCollector.finalize(state, selectedScenario);
-
-      // Track completion if scenario passed
-      if (finalMetrics.success) {
-        markScenarioCompleted(selectedScenario.id);
-      }
-
-      setAppState('debrief');
-    }
-  };
-
-  const handleScram = () => {
-    setScram(true);
-    scramRef.current = true;
-    setRod(0); // SCRAM: Insert all rods immediately
-    rodRef.current = 0;
-    rodActualRef.current = 0; // SCRAM bypasses rate limit
-    setTripActive(true);
-    setTripReason("MANUAL SCRAM");
-  };
-
-  const handleResetTrip = () => {
-    setScram(false);
-    scramRef.current = false;
-    setTripActive(false);
-    setTripReason(null);
-    // Note: Rods stay inserted at 0% - operator must manually withdraw
-  };
 
   // Scenario selection handlers
   const handleSelectScenario = (scenario: TrainingScenario) => {
@@ -408,7 +173,11 @@ export default function TrainingPage() {
 
   const handleStartScenario = () => {
     if (selectedScenario) {
-      initializeModel(selectedScenario);
+      initializeModel(
+        selectedScenario.initialState.reactorState,
+        selectedScenario.initialState.controls.rod,
+        selectedScenario.initialState.timeAcceleration
+      );
       const collector = new MetricsCollector(selectedScenario.id);
       setMetricsCollector(collector);
       setAppState('running');

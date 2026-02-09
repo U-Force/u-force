@@ -344,6 +344,14 @@ export const XENON_WORTH_EQUILIBRIUM: number = -0.028; // -2800 pcm
  */
 export const XENON_TIME_ACCELERATION: number = 500; // 500x faster for interactive simulation
 
+/**
+ * Macroscopic fission cross-section (Σ_f).
+ * Used in xenon equilibrium and fission rate calculations.
+ * Typical PWR value.
+ * Units: [1/cm]
+ */
+export const SIGMA_F_MACRO: number = 0.1; // cm⁻¹
+
 // ============================================================================
 // PARAMETER PACK FOR EASY OVERRIDE
 // ============================================================================

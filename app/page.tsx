@@ -1,297 +1,39 @@
 "use client";
 
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import {
-  ReactorModel,
-  DEFAULT_PARAMS,
-  type ControlInputs,
-  type ReactorState,
-  type ReactivityComponents,
-} from "../lib/reactor";
+import React, { useState, useEffect } from "react";
 import NavigationBar from "../components/NavigationBar";
-
-const DT = 0.01; // 10ms timestep for smooth simulation
-const HISTORY_LENGTH = 500; // 5 seconds of history at 100 samples/s
-const ROD_SPEED = 0.05; // 5%/second max rod movement rate
-
-interface HistoryPoint {
-  t: number;
-  P: number;
-  Tf: number;
-  Tc: number;
-  rho: number;
-}
+import {
+  useReactorSimulation,
+  HISTORY_LENGTH,
+} from "../hooks/useReactorSimulation";
 
 export default function SimulatorPage() {
-  // Control states
-  const [rod, setRod] = useState(0.05);
-  const [pumpOn, setPumpOn] = useState(true);
-  const [scram, setScram] = useState(false);
-  const [speed, setSpeed] = useState(0.5); // Start at 0.5x speed - balanced pace
-  const [learningMode, setLearningMode] = useState(false); // Learning hints toggle
-
-  // Simulation states
-  const [isRunning, setIsRunning] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [state, setState] = useState<ReactorState | null>(null);
-  const [reactivity, setReactivity] = useState<ReactivityComponents | null>(null);
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
-  const [tripActive, setTripActive] = useState(false);
-  const [tripReason, setTripReason] = useState<string | null>(null);
+  const [learningMode, setLearningMode] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const [rodActual, setRodActual] = useState(0.05); // Actual rod position (rate-limited)
 
-  // Refs for animation
-  const modelRef = useRef<ReactorModel | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const lastTimeRef = useRef<number>(0);
-  const accumulatedRef = useRef<number>(0);
+  const sim = useReactorSimulation();
 
-  // Refs for real-time controls (avoid stale closures)
-  const rodRef = useRef(rod);
-  const pumpRef = useRef(pumpOn);
-  const scramRef = useRef(scram);
-  const rodActualRef = useRef(rod); // Actual rod position sent to model (rate-limited)
+  const {
+    rod, pumpOn, speed,
+    isRunning, isPaused,
+    state, reactivity, history,
+    tripActive, tripReason, rodActual,
+    setRod, setPumpOn, setSpeed,
+    handleStart, handlePause, handleResume,
+    handleStop, handleScram, handleResetTrip, handleReset,
+    initializeModel,
+  } = sim;
 
-  // Keep refs in sync with state
-  useEffect(() => { rodRef.current = rod; }, [rod]);
-  useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
-  useEffect(() => { scramRef.current = scram; }, [scram]);
-
-  // Initialize model
-  const initializeModel = useCallback(() => {
+  // Initialize on mount
+  useEffect(() => {
     try {
       setInitError(null);
-
-      // Start in TRUE COLD SHUTDOWN - subcritical, stable, low power
-      // This matches what operators expect: reactor is OFF until you withdraw rods
-      const initialPower = 1e-8; // Essentially zero power (shutdown)
-      const coldTemp = 300; // Cold shutdown temperature (K)
-
-      // Calculate equilibrium precursor concentrations for this tiny power
-      // C_i = (beta_i / lambda_i) * (P / Lambda) in equilibrium
-      const beta = [0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]; // Delayed neutron fractions
-      const lambda = [0.0124, 0.0305, 0.111, 0.301, 1.14, 3.01]; // Decay constants (1/s)
-      const Lambda = 1e-3; // Prompt neutron lifetime (s) - MUST MATCH params.ts LAMBDA_PROMPT
-
-      const precursors = beta.map((b, i) => (b / lambda[i]) * (initialPower / Lambda));
-
-      const shutdownState: ReactorState = {
-        t: 0,
-        P: initialPower,
-        Tf: coldTemp,
-        Tc: coldTemp,
-        C: precursors,
-        I135: 0, // No xenon at cold shutdown
-        Xe135: 0,
-      };
-
-      modelRef.current = new ReactorModel(shutdownState, DEFAULT_PARAMS);
-      setState(shutdownState);
-
-      // Start with rods fully inserted (0%) - truly shutdown state
-      const initialRod = 0.0;
-      setRod(initialRod);
-      rodRef.current = initialRod;
-      rodActualRef.current = initialRod;
-      setRodActual(initialRod);
-
-      setScram(false);
-      scramRef.current = false;
-      setPumpOn(true);
-      pumpRef.current = true;
-      setTripActive(false);
-      setTripReason(null);
-      setHistory([{
-        t: 0,
-        P: initialPower,
-        Tf: coldTemp,
-        Tc: coldTemp,
-        rho: 0,
-      }]);
-
-      // Compute initial reactivity (should be negative - subcritical)
-      const controls: ControlInputs = { rod: initialRod, pumpOn: true, scram: false };
-      const rho = modelRef.current.getReactivity(controls);
-      setReactivity(rho);
-
-      console.log(`Initialized in cold shutdown: P=${initialPower}, T=${coldTemp}K, rod=${initialRod*100}%, rho=${(rho.rhoTotal*1e5).toFixed(0)} pcm`);
+      initializeModel();
     } catch (error) {
       console.error("Initialization error:", error);
       setInitError(error instanceof Error ? error.message : "Failed to initialize reactor model");
     }
-  }, []);
-
-  // Initialize on mount
-  useEffect(() => {
-    initializeModel();
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
   }, [initializeModel]);
-
-  // Protection system check
-  const checkTrips = useCallback((currentState: ReactorState): { trip: boolean; reason: string | null } => {
-    if (currentState.P > 1.1) {
-      return { trip: true, reason: "HIGH POWER >110%" };
-    }
-    if (currentState.Tf > 1800) {
-      return { trip: true, reason: "HIGH FUEL TEMP >1800K" };
-    }
-    if (currentState.Tc > 620) {
-      return { trip: true, reason: "HIGH COOLANT TEMP >620K" };
-    }
-    return { trip: false, reason: null };
-  }, []);
-
-  // Animation loop
-  const tick = useCallback((timestamp: number) => {
-    if (!modelRef.current) {
-      animationRef.current = requestAnimationFrame(tick);
-      return;
-    }
-
-    // PAUSE: Don't update simulation, but keep loop running for responsiveness
-    if (isPaused) {
-      lastTimeRef.current = 0; // Reset time on unpause
-      animationRef.current = requestAnimationFrame(tick);
-      return;
-    }
-
-    if (lastTimeRef.current === 0) {
-      lastTimeRef.current = timestamp;
-    }
-
-    const deltaMs = timestamp - lastTimeRef.current;
-    lastTimeRef.current = timestamp;
-
-    // Accumulate simulation time
-    const simDelta = (deltaMs / 1000) * speed;
-    accumulatedRef.current += simDelta;
-
-    // Step simulation
-    const stepsNeeded = Math.floor(accumulatedRef.current / DT);
-    accumulatedRef.current -= stepsNeeded * DT;
-
-    // Rate-limit rod movement
-    const rodTarget = rodRef.current;
-    const rodActualNow = rodActualRef.current;
-    const maxDelta = ROD_SPEED * simDelta;
-    rodActualRef.current = rodActualNow + Math.max(-maxDelta, Math.min(maxDelta, rodTarget - rodActualNow));
-
-    // Use refs for real-time control values
-    let currentScram = scramRef.current;
-    const controls: ControlInputs = {
-      rod: rodActualRef.current,
-      pumpOn: pumpRef.current,
-      scram: currentScram
-    };
-
-    try {
-      for (let i = 0; i < stepsNeeded; i++) {
-        const newState = modelRef.current.step(DT, { ...controls, scram: currentScram });
-
-        // Check protection system
-        if (!tripActive && !currentScram) {
-          const { trip, reason } = checkTrips(newState);
-          if (trip) {
-            setTripActive(true);
-            setTripReason(reason);
-            setScram(true);
-            scramRef.current = true;
-            setRod(0); // Auto-trip: Insert all rods
-            rodRef.current = 0;
-            rodActualRef.current = 0; // Trip bypasses rate limit
-            currentScram = true;
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Simulation error:", error);
-      setTripActive(true);
-      setTripReason("SIMULATION ERROR");
-      setScram(true);
-      scramRef.current = true;
-      setRod(0); // Error: Insert all rods
-      rodRef.current = 0;
-      rodActualRef.current = 0;
-      handleStop();
-      return;
-    }
-
-    const currentState = modelRef.current.getState();
-    const currentReactivity = modelRef.current.getReactivity(controls);
-
-    setState(currentState);
-    setReactivity(currentReactivity);
-    setRodActual(rodActualRef.current);
-
-    // Update history
-    setHistory(prev => {
-      const newPoint: HistoryPoint = {
-        t: currentState.t,
-        P: currentState.P,
-        Tf: currentState.Tf,
-        Tc: currentState.Tc,
-        rho: currentReactivity.rhoTotal,
-      };
-      const updated = [...prev, newPoint];
-      return updated.slice(-HISTORY_LENGTH);
-    });
-
-    animationRef.current = requestAnimationFrame(tick);
-  }, [isPaused, speed, tripActive, checkTrips]);
-
-  // Start/Stop handlers
-  const handleStart = () => {
-    setIsRunning(true);
-    setIsPaused(false);
-    lastTimeRef.current = 0;
-    animationRef.current = requestAnimationFrame(tick);
-  };
-
-  const handlePause = () => {
-    setIsPaused(true);
-  };
-
-  const handleResume = () => {
-    setIsPaused(false);
-    lastTimeRef.current = 0;
-  };
-
-  const handleStop = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    setIsRunning(false);
-    setIsPaused(false);
-  };
-
-  const handleReset = () => {
-    handleStop();
-    initializeModel();
-  };
-
-  const handleScram = () => {
-    setScram(true);
-    scramRef.current = true;
-    setRod(0); // SCRAM: Insert all rods immediately
-    rodRef.current = 0;
-    rodActualRef.current = 0; // SCRAM bypasses rate limit
-    setTripActive(true);
-    setTripReason("MANUAL SCRAM");
-  };
-
-  const handleResetTrip = () => {
-    setScram(false);
-    scramRef.current = false;
-    setTripActive(false);
-    setTripReason(null);
-    // Note: Rods stay inserted at 0% - operator must manually withdraw
-  };
 
   // Computed values
   const power = state ? state.P * 100 : 0.01; // Default to 0.01% when no state

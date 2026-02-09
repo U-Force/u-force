@@ -35,6 +35,7 @@ export {
   SCRAM_TAU,
   rodWorthCurve,
   createParams,
+  SIGMA_F_MACRO,
 } from './params';
 
 // Model
@@ -42,6 +43,7 @@ export {
   ReactorModel,
   createSteadyState,
   createCriticalSteadyState,
+  createColdShutdownState,
   computeCriticalRodPosition,
   computeReactivity,
   computeDopplerReactivity,
