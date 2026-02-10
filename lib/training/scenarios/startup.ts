@@ -19,6 +19,7 @@ export const normalStartupScenario: TrainingScenario = {
   difficulty: 2,
   estimatedDuration: 15,
   recommendedRole: TrainingRole.RO,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with actual reactor startup tutorial
 
   initialState: {
     reactorState: {

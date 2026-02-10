@@ -18,6 +18,7 @@ export const powerManeuveringScenario: TrainingScenario = {
   difficulty: 2,
   estimatedDuration: 25,
   recommendedRole: TrainingRole.RO,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with power maneuvering techniques video
 
   initialState: {
     reactorState: {

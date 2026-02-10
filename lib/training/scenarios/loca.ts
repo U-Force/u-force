@@ -18,6 +18,7 @@ export const locaScenario: TrainingScenario = {
   difficulty: 4,
   estimatedDuration: 15,
   recommendedRole: TrainingRole.SRO,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with LOCA emergency procedures video
 
   initialState: {
     reactorState: {

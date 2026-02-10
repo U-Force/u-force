@@ -18,6 +18,7 @@ export const coolantSystemScenario: TrainingScenario = {
   difficulty: 2,
   estimatedDuration: 20,
   recommendedRole: TrainingRole.RO_TRAINEE,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with primary coolant system tutorial
 
   initialState: {
     reactorState: {

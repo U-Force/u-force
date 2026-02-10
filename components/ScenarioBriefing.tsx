@@ -4,6 +4,29 @@ import React from 'react';
 import type { TrainingScenario, TrainingRole } from '../lib/training/types';
 import { getRoleDisplayName, getRoleDescription } from '../lib/training/roles';
 
+/**
+ * Convert video URL to embeddable format
+ * Supports YouTube, Vimeo, and direct video files
+ */
+function getEmbedUrl(url: string): string {
+  // YouTube
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    const videoId = url.includes('youtu.be')
+      ? url.split('youtu.be/')[1]?.split('?')[0]
+      : new URL(url).searchParams.get('v');
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+
+  // Vimeo
+  if (url.includes('vimeo.com')) {
+    const videoId = url.split('vimeo.com/')[1]?.split('?')[0];
+    return `https://player.vimeo.com/video/${videoId}`;
+  }
+
+  // Direct video file or already embedded URL
+  return url;
+}
+
 interface ScenarioBriefingProps {
   scenario: TrainingScenario;
   role: TrainingRole;
@@ -37,6 +60,23 @@ export default function ScenarioBriefing({
           <div style={roleDescription}>{getRoleDescription(role)}</div>
         </div>
       </div>
+
+      {/* Educational Video */}
+      {scenario.videoUrl && (
+        <div style={section}>
+          <div style={sectionTitle}>EDUCATIONAL VIDEO</div>
+          <div style={videoContainer}>
+            <iframe
+              style={videoFrame}
+              src={getEmbedUrl(scenario.videoUrl)}
+              title={`${scenario.name} - Tutorial Video`}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
 
       {/* Scenario Briefing */}
       <div style={section}>
@@ -266,4 +306,22 @@ const startButton: React.CSSProperties = {
   color: '#000',
   border: 'none',
   boxShadow: '0 0 20px rgba(255, 153, 0, 0.5)',
+};
+
+const videoContainer: React.CSSProperties = {
+  position: 'relative',
+  paddingBottom: '56.25%', // 16:9 aspect ratio
+  height: 0,
+  overflow: 'hidden',
+  background: 'rgba(0, 0, 0, 0.6)',
+  border: '1px solid #444',
+  borderRadius: '6px',
+};
+
+const videoFrame: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
 };

@@ -18,6 +18,7 @@ export const feedwaterLossScenario: TrainingScenario = {
   difficulty: 3,
   estimatedDuration: 20,
   recommendedRole: TrainingRole.RO,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with feedwater loss response video
 
   initialState: {
     reactorState: {

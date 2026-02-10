@@ -19,6 +19,7 @@ export const pumpTripScenario: TrainingScenario = {
   difficulty: 3,
   estimatedDuration: 5,
   recommendedRole: TrainingRole.RO,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with pump trip emergency response video
 
   initialState: {
     reactorState: {

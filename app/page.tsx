@@ -54,6 +54,10 @@ export default function SimulatorPage() {
   const simTime = state ? state.t : 0;
   const decayHeatPercent = state ? state.decayHeat.reduce((sum, d) => sum + d, 0) * 100 : 0;
 
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [controlsExpanded, setControlsExpanded] = useState(true);
+  const [displaysExpanded, setDisplaysExpanded] = useState(true);
+
   return (
     <>
       <style jsx global>{`
@@ -64,9 +68,10 @@ export default function SimulatorPage() {
         }
 
         body {
-          background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+          background: #000;
           margin: 0;
           font-family: 'Inter', sans-serif;
+          overflow: hidden;
         }
 
         @keyframes pulse {
@@ -93,36 +98,56 @@ export default function SimulatorPage() {
       <NavigationBar />
 
       <main style={container}>
-        <header style={header}>
-          <div style={headerRow}>
-            <div style={titleContainer}>
-              <img src="/logo.png" alt="U-FORCE Logo" style={logoIcon} />
-              <div>
-                <h1 style={title}>U-FORCE Reactor Simulator</h1>
-                <p style={subtitle}>
-                  Free Play Mode - Real-time point kinetics simulation
-                </p>
-              </div>
-            </div>
-            <div style={statusBadge(isRunning, isPaused, tripActive)}>
-              {tripActive ? "TRIP" : isRunning ? (isPaused ? "PAUSED" : "RUNNING") : "READY"}
+        {/* Top Status Bar */}
+        <div style={topBar}>
+          <div style={topBarLeft}>
+            <img src="/logo.png" alt="U-FORCE" style={topBarLogo} />
+            <div>
+              <div style={topBarTitle}>U-FORCE Reactor Simulator</div>
+              <div style={topBarSubtitle}>Free Play Mode</div>
             </div>
           </div>
-        </header>
+          <div style={statusBadge(isRunning, isPaused, tripActive)}>
+            {tripActive ? "⚠ TRIP" : isRunning ? (isPaused ? "⏸ PAUSED" : "▶ RUNNING") : "● READY"}
+          </div>
+        </div>
 
-        <TripBanner
-          tripActive={tripActive}
-          tripReason={tripReason}
-          initError={initError}
-          variant="freeplay"
-        />
+        {/* Trip Banner */}
+        {(tripActive || initError) && (
+          <div style={tripBannerOverlay}>
+            <TripBanner
+              tripActive={tripActive}
+              tripReason={tripReason}
+              initError={initError}
+              variant="freeplay"
+            />
+          </div>
+        )}
 
-        <section style={layout}>
-          {/* Left Column - Controls */}
-          <div style={controlColumn}>
+        {/* Three Column Layout: Left Controls | Center Displays | Right Controls */}
+        <div style={mainLayout}>
+          {/* LEFT PANEL - Primary Controls */}
+          <div style={leftPanel}>
             <div style={panelHeader}>
-              <div style={panelIndicator(isRunning && !isPaused)} />
-              <span style={panelTitle}>CORE INPUTS</span>
+              <span style={panelTitle}>PRIMARY CONTROLS</span>
+            </div>
+
+            {/* Learning Mode Toggle */}
+            <div style={learningModeSection}>
+              <button
+                style={learningModeButton(learningMode)}
+                onClick={() => setLearningMode(!learningMode)}
+              >
+                <span>💡 LEARNING MODE</span>
+                <span style={learningMode ? statusOn : statusOff}>
+                  {learningMode ? "ON" : "OFF"}
+                </span>
+              </button>
+              {learningMode && (
+                <div style={learningHint}>
+                  Learning mode shows helpful tips about each control. Perfect for beginners!
+                </div>
+              )}
             </div>
 
             <SimControlBar
@@ -142,24 +167,6 @@ export default function SimulatorPage() {
             />
 
             <SpeedControl speed={speed} onSpeedChange={setSpeed} />
-
-            {/* Learning Mode Toggle */}
-            <div style={learningModeSection}>
-              <button
-                style={learningModeButton(learningMode)}
-                onClick={() => setLearningMode(!learningMode)}
-              >
-                <span>💡 LEARNING MODE</span>
-                <span style={learningMode ? statusOn : statusOff}>
-                  {learningMode ? "ON" : "OFF"}
-                </span>
-              </button>
-              {learningMode && (
-                <div style={learningHint}>
-                  Learning mode shows helpful tips about each control. Perfect for beginners!
-                </div>
-              )}
-            </div>
 
             <ControlRodSlider
               rod={rod}
@@ -213,277 +220,425 @@ export default function SimulatorPage() {
                 </div>
               )}
             </BoronControl>
+          </div>
 
-            {/* Quick Guide */}
-            <div style={hintBox}>
-              <div style={hintTitle}>Quick Guide</div>
-              <ul style={hintList as React.CSSProperties}>
-                <li>Start simulation, then adjust rod slider in real-time</li>
-                <li>Slowly withdraw rods (drag right) to increase power</li>
-                <li>Watch thermal feedback stabilize the reactor</li>
-                <li>All controls work during simulation - just like a real control room</li>
-                <li>Protection system auto-trips at 110% power</li>
-              </ul>
+          {/* CENTER PANEL - Main Displays (Control Board) */}
+          <div style={centerPanel}>
+            <div style={controlBoardHeader}>
+              <div style={controlBoardTitle}>REACTOR CONTROL BOARD</div>
+              <div style={controlBoardSubtitle}>Main Instrumentation Panel</div>
+            </div>
+
+            <div style={displayGrid}>
+              {/* Top Row - Power Display */}
+              <div style={gridFullWidth}>
+                <PowerDisplay power={power} decayHeat={decayHeatPercent}>
+                  {learningMode && (
+                    <div style={{...learningHint, marginTop: "12px"}}>
+                      💡 <strong>Reactor Power:</strong> Shows how much thermal energy the reactor is producing.
+                      100% = 3000 MWth (3 billion watts). Power above 110% triggers automatic shutdown!
+                    </div>
+                  )}
+                </PowerDisplay>
+              </div>
+
+              {/* Middle Row - Power History */}
+              <div style={gridFullWidth}>
+                <PowerHistoryGraph
+                  history={history}
+                  historyLength={HISTORY_LENGTH}
+                  simTime={simTime}
+                />
+              </div>
+
+              {/* Bottom Row - Temperature and Reactivity */}
+              <div style={gridHalfWidth}>
+                <TemperatureMetrics fuelTemp={fuelTemp} coolantTemp={coolantTemp}>
+                  {learningMode && (
+                    <div style={learningHint}>
+                      💡 <strong>Temperatures:</strong> Fuel heats up from fission. Coolant removes this heat.
+                      As temperatures rise, negative feedback reduces reactivity - this is the reactor's natural safety mechanism!
+                    </div>
+                  )}
+                </TemperatureMetrics>
+              </div>
+
+              <div style={gridHalfWidth}>
+                <ReactivityPanel reactivity={reactivity}>
+                  {learningMode && (
+                    <div style={{...learningHint, marginTop: "12px"}}>
+                      💡 <strong>Reactivity:</strong> Measures the balance of the chain reaction in "pcm" (parts per million).
+                      Positive = power rising, Negative = power falling, Zero = stable.
+                      External = rod position, Doppler & Moderator = temperature feedback effects.
+                    </div>
+                  )}
+                </ReactivityPanel>
+              </div>
             </div>
           </div>
 
-          {/* Right Column - Displays */}
-          <div style={displayColumn}>
-            <PowerDisplay power={power} decayHeat={decayHeatPercent}>
-              {learningMode && (
-                <div style={{...learningHint, marginTop: "12px"}}>
-                  💡 <strong>Reactor Power:</strong> Shows how much thermal energy the reactor is producing.
-                  100% = 3000 MWth (3 billion watts). Power above 110% triggers automatic shutdown!
-                </div>
-              )}
-            </PowerDisplay>
+          {/* RIGHT PANEL - Status & Information */}
+          <div style={rightPanel}>
+            <div style={panelHeader}>
+              <span style={panelTitle}>STATUS & INFO</span>
+            </div>
 
-            <PowerHistoryGraph
-              history={history}
-              historyLength={HISTORY_LENGTH}
-              simTime={simTime}
-            />
-
-            <TemperatureMetrics fuelTemp={fuelTemp} coolantTemp={coolantTemp}>
-              {learningMode && (
-                <div style={learningHint}>
-                  💡 <strong>Temperatures:</strong> Fuel heats up from fission. Coolant removes this heat.
-                  As temperatures rise, negative feedback reduces reactivity - this is the reactor's natural safety mechanism!
+            {/* Quick Status Cards */}
+            <div style={statusCardsContainer}>
+              <div style={statusCard}>
+                <div style={statusCardLabel}>POWER LEVEL</div>
+                <div style={statusCardValue(power > 100 ? 'danger' : power > 80 ? 'warning' : 'normal')}>
+                  {power.toFixed(1)}%
                 </div>
-              )}
-            </TemperatureMetrics>
+              </div>
 
-            <ReactivityPanel reactivity={reactivity}>
-              {learningMode && (
-                <div style={{...learningHint, marginTop: "12px"}}>
-                  💡 <strong>Reactivity:</strong> Measures the balance of the chain reaction in "pcm" (parts per million).
-                  Positive = power rising, Negative = power falling, Zero = stable.
-                  External = rod position, Doppler & Moderator = temperature feedback effects.
+              <div style={statusCard}>
+                <div style={statusCardLabel}>FUEL TEMP</div>
+                <div style={statusCardValue(fuelTemp > 1600 ? 'danger' : fuelTemp > 1200 ? 'warning' : 'normal')}>
+                  {fuelTemp.toFixed(0)} K
                 </div>
-              )}
-            </ReactivityPanel>
+              </div>
+
+              <div style={statusCard}>
+                <div style={statusCardLabel}>COOLANT TEMP</div>
+                <div style={statusCardValue(coolantTemp > 600 ? 'danger' : coolantTemp > 550 ? 'warning' : 'normal')}>
+                  {coolantTemp.toFixed(0)} K
+                </div>
+              </div>
+
+              <div style={statusCard}>
+                <div style={statusCardLabel}>SIM TIME</div>
+                <div style={statusCardValue('normal')}>
+                  {Math.floor(simTime / 60)}:{(simTime % 60).toFixed(0).padStart(2, '0')}
+                </div>
+              </div>
+
+              <div style={statusCard}>
+                <div style={statusCardLabel}>ROD POSITION</div>
+                <div style={statusCardValue('normal')}>
+                  {(rodActual * 100).toFixed(1)}%
+                </div>
+              </div>
+
+              <div style={statusCard}>
+                <div style={statusCardLabel}>PUMP STATUS</div>
+                <div style={statusCardValue(pumpOn ? 'normal' : 'danger')}>
+                  {pumpOn ? 'RUNNING' : 'OFF'}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Guide */}
+            <div style={hintBox}>
+              <div style={hintTitle}>💡 QUICK GUIDE</div>
+              <ul style={hintList as React.CSSProperties}>
+                <li>Start simulation, then adjust controls</li>
+                <li>Withdraw rods slowly to increase power</li>
+                <li>Monitor feedback effects</li>
+                <li>SCRAM available for emergencies</li>
+              </ul>
+            </div>
           </div>
-        </section>
+        </div>
       </main>
     </>
   );
 }
 
 // ============================================================================
-// PAGE-SPECIFIC STYLES (layout, header, learning mode)
+// STYLES - Control Room Layout
 // ============================================================================
 
 const container: React.CSSProperties = {
-  maxWidth: "100vw",
-  minHeight: "100vh",
-  margin: "0",
-  padding: "16px",
-  paddingTop: "76px",
-  background: "#0f1419",
-  position: "relative",
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  overflow: 'hidden',
+  background: 'linear-gradient(180deg, #0a0f14 0%, #121820 100%)',
 };
 
-const header: React.CSSProperties = {
-  marginBottom: "16px",
-  background: "rgba(20, 25, 30, 0.8)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "6px",
-  padding: "12px 20px",
-  boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
-  position: "relative",
+const topBar: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: '60px',
+  background: 'rgba(10, 15, 20, 0.95)',
+  borderBottom: '2px solid rgba(16, 185, 129, 0.4)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0 24px',
+  zIndex: 100,
+  boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
 };
 
-const headerRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "20px",
+const topBarLeft: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '16px',
 };
 
-const titleContainer: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "16px",
+const topBarLogo: React.CSSProperties = {
+  width: '36px',
+  height: '36px',
+  filter: 'brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%)',
 };
 
-const logoIcon: React.CSSProperties = {
-  width: "42px",
-  height: "42px",
-  filter: "brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%)",
-  animation: "glow 3s ease-in-out infinite",
-};
-
-const title: React.CSSProperties = {
-  fontSize: "24px",
-  margin: "0 0 2px",
-  color: "#10b981",
-  letterSpacing: "0px",
-  textTransform: "none",
+const topBarTitle: React.CSSProperties = {
+  fontSize: '18px',
+  fontWeight: 'bold',
+  color: '#10b981',
   fontFamily: "'Inter', sans-serif",
-};
-
-const subtitle: React.CSSProperties = {
-  fontSize: "11px",
-  color: "#6f6",
   margin: 0,
+  letterSpacing: '0.5px',
+};
+
+const topBarSubtitle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#6ee7b7',
   fontFamily: "'Inter', sans-serif",
-  letterSpacing: "1px",
+  opacity: 0.8,
+  letterSpacing: '0.5px',
 };
 
 const statusBadge = (running: boolean, paused: boolean, trip: boolean): React.CSSProperties => ({
-  padding: "8px 16px",
-  borderRadius: "6px",
-  fontSize: "13px",
-  fontWeight: "bold",
-  letterSpacing: "0.5px",
+  padding: '10px 20px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: 'bold',
+  letterSpacing: '1px',
   fontFamily: "'Inter', sans-serif",
   background: trip
-    ? "rgba(239, 68, 68, 0.2)"
+    ? 'rgba(239, 68, 68, 0.2)'
     : running
-      ? (paused ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.2)")
-      : "rgba(100, 116, 139, 0.2)",
-  color: trip ? "#ef4444" : running ? (paused ? "#f59e0b" : "#10b981") : "#94a3b8",
-  border: `1px solid ${trip ? "#ef4444" : running ? (paused ? "#f59e0b" : "#10b981") : "#64748b"}`,
-  animation: trip ? "blink 0.5s infinite" : "none",
+      ? (paused ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)')
+      : 'rgba(100, 116, 139, 0.2)',
+  color: trip ? '#ef4444' : running ? (paused ? '#f59e0b' : '#10b981') : '#94a3b8',
+  border: `2px solid ${trip ? '#ef4444' : running ? (paused ? '#f59e0b' : '#10b981') : '#64748b'}`,
+  animation: trip ? 'blink 0.5s infinite' : 'none',
+  boxShadow: trip ? '0 0 20px rgba(239, 68, 68, 0.5)' : 'none',
 });
 
-const layout: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "400px 1fr",
-  gap: "16px",
-  minHeight: "calc(100vh - 120px)",
+const tripBannerOverlay: React.CSSProperties = {
+  position: 'fixed',
+  top: '70px',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  zIndex: 90,
+  maxWidth: '800px',
+  width: '90%',
 };
 
-const controlColumn: React.CSSProperties = {
-  background: "rgba(20, 25, 30, 0.6)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "6px",
-  padding: "16px",
-  boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
-  position: "relative",
+const mainLayout: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '320px 1fr 320px',
+  gap: '16px',
+  padding: '16px',
+  paddingTop: '76px',
+  height: 'calc(100vh - 60px)',
+  marginTop: '60px',
 };
 
-const displayColumn: React.CSSProperties = {
-  background: "rgba(20, 25, 30, 0.6)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "6px",
-  padding: "20px",
-  boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
-  position: "relative",
+const leftPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.8)',
+  border: '2px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '8px',
+  padding: '16px',
+  overflowY: 'auto',
+  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+};
+
+const centerPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.6)',
+  border: '2px solid rgba(16, 185, 129, 0.4)',
+  borderRadius: '8px',
+  padding: '20px',
+  overflowY: 'auto',
+  boxShadow: '0 4px 30px rgba(0,0,0,0.5), inset 0 0 60px rgba(16, 185, 129, 0.05)',
+};
+
+const rightPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.8)',
+  border: '2px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '8px',
+  padding: '16px',
+  overflowY: 'auto',
+  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
 };
 
 const panelHeader: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  marginBottom: "16px",
-  padding: "8px 12px",
-  background: "rgba(15, 20, 25, 0.4)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "6px",
+  marginBottom: '16px',
+  paddingBottom: '12px',
+  borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
 };
 
-const panelIndicator = (active: boolean): React.CSSProperties => ({
-  width: "10px",
-  height: "10px",
-  borderRadius: "50%",
-  background: active ? "#10b981" : "#374151",
-  boxShadow: active ? "0 0 8px rgba(16, 185, 129, 0.6)" : "none",
-  border: active ? "2px solid #6ee7b7" : "2px solid #4b5563",
+const panelTitle: React.CSSProperties = {
+  fontSize: '13px',
+  letterSpacing: '1.5px',
+  color: '#6ee7b7',
+  fontWeight: 'bold',
+  fontFamily: "'Inter', sans-serif",
+};
+
+const controlBoardHeader: React.CSSProperties = {
+  textAlign: 'center',
+  marginBottom: '24px',
+  paddingBottom: '16px',
+  borderBottom: '3px solid rgba(16, 185, 129, 0.4)',
+};
+
+const controlBoardTitle: React.CSSProperties = {
+  fontSize: '20px',
+  fontWeight: 'bold',
+  color: '#10b981',
+  fontFamily: "'Inter', sans-serif",
+  letterSpacing: '2px',
+  marginBottom: '4px',
+  textTransform: 'uppercase',
+};
+
+const controlBoardSubtitle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#6ee7b7',
+  fontFamily: "'Inter', sans-serif",
+  opacity: 0.7,
+  letterSpacing: '1px',
+};
+
+const displayGrid: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px',
+};
+
+const gridFullWidth: React.CSSProperties = {
+  width: '100%',
+};
+
+const gridHalfWidth: React.CSSProperties = {
+  width: '100%',
+  display: 'inline-block',
+};
+
+const statusCardsContainer: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr',
+  gap: '12px',
+  marginBottom: '16px',
+};
+
+const statusCard: React.CSSProperties = {
+  background: 'rgba(0, 0, 0, 0.4)',
+  border: '1px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '6px',
+  padding: '12px',
+};
+
+const statusCardLabel: React.CSSProperties = {
+  fontSize: '9px',
+  color: '#6ee7b7',
+  letterSpacing: '1px',
+  marginBottom: '6px',
+  fontFamily: "'Inter', sans-serif",
+  fontWeight: 'bold',
+};
+
+const statusCardValue = (status: 'normal' | 'warning' | 'danger'): React.CSSProperties => ({
+  fontSize: '16px',
+  color: status === 'danger' ? '#ef4444' : status === 'warning' ? '#f59e0b' : '#10b981',
+  fontWeight: 'bold',
+  fontFamily: "'Share Tech Mono', monospace",
 });
 
-const panelTitle: React.CSSProperties = {
-  fontSize: "13px",
-  letterSpacing: "0.5px",
-  color: "#6ee7b7",
-  fontWeight: "bold",
+const hintBox: React.CSSProperties = {
+  padding: '12px',
+  borderRadius: '6px',
+  border: '1px solid rgba(255, 153, 0, 0.4)',
+  background: 'rgba(255, 153, 0, 0.1)',
+  marginTop: '16px',
+};
+
+const hintTitle: React.CSSProperties = {
+  fontSize: '10px',
+  letterSpacing: '1px',
+  color: '#ff9900',
+  marginBottom: '8px',
+  fontWeight: 'bold',
   fontFamily: "'Inter', sans-serif",
-  textTransform: "none",
-  flex: 1,
+};
+
+const hintList: React.CSSProperties = {
+  margin: 0,
+  paddingLeft: '16px',
+  fontSize: '10px',
+  color: '#ccc',
+  lineHeight: 1.8,
 };
 
 const learningModeSection: React.CSSProperties = {
-  marginBottom: "16px",
-  padding: "12px",
-  background: "rgba(0, 255, 170, 0.05)",
-  border: "1px solid rgba(0, 255, 170, 0.2)",
-  borderRadius: "6px",
+  marginBottom: '16px',
+  padding: '12px',
+  background: 'rgba(0, 255, 170, 0.08)',
+  border: '1px solid rgba(0, 255, 170, 0.3)',
+  borderRadius: '6px',
 };
 
 const learningModeButton = (active: boolean): React.CSSProperties => ({
-  width: "100%",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "12px 16px",
-  borderRadius: "3px",
-  fontSize: "12px",
-  fontWeight: "bold",
-  letterSpacing: "1.5px",
+  width: '100%',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '12px 16px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: 'bold',
+  letterSpacing: '1px',
   fontFamily: "'Inter', sans-serif",
-  textTransform: "none",
-  cursor: "pointer",
-  border: active ? "2px solid #6ee7b7" : "2px solid #444",
+  cursor: 'pointer',
+  border: active ? '2px solid #6ee7b7' : '2px solid #444',
   background: active
-    ? "linear-gradient(180deg, rgba(0, 255, 170, 0.2) 0%, rgba(0, 255, 170, 0.1) 100%)"
-    : "linear-gradient(180deg, #333 0%, #222 100%)",
-  color: active ? "#6ee7b7" : "#888",
+    ? 'linear-gradient(180deg, rgba(0, 255, 170, 0.2) 0%, rgba(0, 255, 170, 0.1) 100%)'
+    : 'linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)',
+  color: active ? '#6ee7b7' : '#888',
   boxShadow: active
-    ? "0 0 15px rgba(0, 255, 170, 0.4), 0 4px 0 rgba(0,0,0,0.3)"
-    : "0 4px 0 rgba(0,0,0,0.3)",
-  transition: "all 0.2s",
+    ? '0 0 15px rgba(0, 255, 170, 0.4), 0 4px 0 rgba(0,0,0,0.3)'
+    : '0 4px 0 rgba(0,0,0,0.3)',
+  transition: 'all 0.2s',
 });
 
 const learningHint: React.CSSProperties = {
-  marginTop: "12px",
-  padding: "10px",
-  background: "rgba(0, 255, 170, 0.1)",
-  border: "1px solid rgba(0, 255, 170, 0.3)",
-  borderRadius: "3px",
-  fontSize: "11px",
-  color: "#6ee7b7",
+  marginTop: '12px',
+  padding: '10px 12px',
+  background: 'rgba(0, 255, 170, 0.1)',
+  border: '1px solid rgba(0, 255, 170, 0.3)',
+  borderRadius: '4px',
+  fontSize: '11px',
+  color: '#6ee7b7',
   lineHeight: 1.6,
   fontFamily: "'Inter', sans-serif",
 };
 
 const statusOn: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#10b981",
-  fontWeight: "bold",
+  fontSize: '12px',
+  color: '#10b981',
+  fontWeight: 'bold',
   fontFamily: "'Inter', sans-serif",
-  letterSpacing: "1px",
+  letterSpacing: '1px',
 };
 
 const statusOff: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#ff5555",
-  fontWeight: "bold",
+  fontSize: '12px',
+  color: '#ff5555',
+  fontWeight: 'bold',
   fontFamily: "'Inter', sans-serif",
-  letterSpacing: "1px",
+  letterSpacing: '1px',
 };
 
 const controlGroup: React.CSSProperties = {
-  marginBottom: "16px",
-};
-
-const hintBox: React.CSSProperties = {
-  padding: "12px",
-  borderRadius: "6px",
-  border: "1px solid #333",
-  background: "rgba(0, 0, 0, 0.4)",
-};
-
-const hintTitle: React.CSSProperties = {
-  fontSize: "11px",
-  letterSpacing: "1px",
-  color: "#ff9900",
-  marginBottom: "8px",
-};
-
-const hintList: React.CSSProperties = {
-  margin: 0,
-  paddingLeft: "16px",
-  fontSize: "11px",
-  color: "#888",
-  lineHeight: 1.6,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px',
 };

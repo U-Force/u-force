@@ -43,6 +43,7 @@ export default function TrainingPage() {
   const [selectedScenario, setSelectedScenario] = useState<TrainingScenario | null>(null);
   const [currentRole, setCurrentRole] = useState<TrainingRole>(TrainingRole.RO);
   const [metricsCollector, setMetricsCollector] = useState<MetricsCollector | null>(null);
+  const [learningMode, setLearningMode] = useState(false);
 
   // Real-time metrics for checkpoint evaluation
   const [liveMetrics, setLiveMetrics] = useState({
@@ -288,41 +289,59 @@ export default function TrainingPage() {
       `}</style>
 
       <main style={container}>
-        <header style={header}>
-          <div style={headerRow}>
-            <div style={titleContainer}>
-              <img src="/logo.png" alt="U-FORCE Logo" style={logoIcon} />
-              <div>
-                <h1 style={title}>
-                  {selectedScenario ? selectedScenario.name : 'U-FORCE Reactor Simulator'}
-                </h1>
-                <p style={subtitle}>
-                  {selectedScenario
-                    ? `Training Mode - ${currentRole}`
-                    : 'Free Play Mode - Real-time point kinetics simulation'}
-                </p>
+        {/* Top Status Bar */}
+        <div style={topBar}>
+          <div style={topBarLeft}>
+            <img src="/logo.png" alt="U-FORCE" style={topBarLogo} />
+            <div>
+              <div style={topBarTitle}>
+                {selectedScenario ? selectedScenario.name : 'U-FORCE Reactor Simulator'}
+              </div>
+              <div style={topBarSubtitle}>
+                {selectedScenario ? `Training Mode - ${currentRole}` : 'Free Play Mode'}
               </div>
             </div>
-            <div>
-              <button style={exitButton} onClick={handleBackToSelector}>
-                ← EXIT
-              </button>
-            </div>
           </div>
-        </header>
+          <button style={exitButton} onClick={handleBackToSelector}>
+            ← EXIT SCENARIO
+          </button>
+        </div>
 
-        <TripBanner
-          tripActive={tripActive}
-          tripReason={tripReason}
-          variant="training"
-        />
+        {/* Trip Banner */}
+        {tripActive && (
+          <div style={tripBannerOverlay}>
+            <TripBanner
+              tripActive={tripActive}
+              tripReason={tripReason}
+              variant="training"
+            />
+          </div>
+        )}
 
-        <section style={layout}>
-          {/* Left Column - Controls */}
-          <div style={controlColumn}>
+        {/* Three Column Layout: Left Controls | Center Displays | Right Objectives */}
+        <div style={mainLayout}>
+          {/* LEFT PANEL - Primary Controls */}
+          <div style={leftPanel}>
             <div style={panelHeader}>
-              <div style={panelIndicator(isRunning && !isPaused)} />
-              <span style={panelTitle}>CORE INPUTS</span>
+              <span style={panelTitle}>PRIMARY CONTROLS</span>
+            </div>
+
+            {/* Learning Mode Toggle */}
+            <div style={learningModeSection}>
+              <button
+                style={learningModeButton(learningMode)}
+                onClick={() => setLearningMode(!learningMode)}
+              >
+                <span>💡 LEARNING MODE</span>
+                <span style={learningMode ? statusOn : statusOff}>
+                  {learningMode ? "ON" : "OFF"}
+                </span>
+              </button>
+              {learningMode && (
+                <div style={learningHint}>
+                  Learning mode shows helpful tips about each control and how it affects the reactor!
+                </div>
+              )}
             </div>
 
             <SimControlBar
@@ -351,7 +370,15 @@ export default function TrainingPage() {
               showActiveHint={permissions.canControlRods}
               showScramHint={permissions.canControlRods}
               disabledMessage={!permissions.canControlRods ? "Rod control disabled for this role" : undefined}
-            />
+            >
+              {learningMode && (
+                <div style={learningHint}>
+                  💡 <strong>Control Rods:</strong> Absorb neutrons to control the fission chain reaction.
+                  Inserting rods (lower %) reduces power. Withdrawing rods (higher %) increases power.
+                  Move slowly to maintain control!
+                </div>
+              )}
+            </ControlRodSlider>
 
             <PumpScramControls
               pumpOn={pumpOn}
@@ -360,34 +387,95 @@ export default function TrainingPage() {
               onScram={handleScram}
               pumpDisabled={!permissions.canControlPump}
               scramDisabled={!permissions.canScram}
-            />
+            >
+              {learningMode && (
+                <div style={controlGroup}>
+                  <div style={learningHint}>
+                    💡 <strong>Primary Pump:</strong> Circulates coolant through the reactor core to remove heat.
+                    Turning OFF the pump reduces cooling efficiency - temperatures will rise!
+                  </div>
+                  <div style={{...learningHint, marginTop: "8px"}}>
+                    💡 <strong>SCRAM:</strong> Emergency shutdown button. Instantly inserts all control rods to 0%
+                    and stops the chain reaction. Use this if power or temperature gets too high!
+                  </div>
+                </div>
+              )}
+            </PumpScramControls>
 
             <BoronControl
               boronConc={boronConc}
               boronActual={boronActual}
               onBoronChange={setBoronConc}
               disabled={!permissions.canControlBoron}
-            />
+            >
+              {learningMode && (
+                <div style={learningHint}>
+                  💡 <strong>Soluble Boron:</strong> Boric acid dissolved in coolant absorbs neutrons for long-term
+                  reactivity control. Increasing boron adds negative reactivity. Real PWRs use boron to compensate
+                  for fuel burnup over months of operation.
+                </div>
+              )}
+            </BoronControl>
           </div>
 
-          {/* Center Column - Displays */}
-          <div style={displayColumn}>
-            <PowerDisplay power={power} decayHeat={decayHeatPercent} />
+          {/* CENTER PANEL - Main Displays (Control Board) */}
+          <div style={centerPanel}>
+            <div style={controlBoardHeader}>
+              <div style={controlBoardTitle}>REACTOR CONTROL BOARD</div>
+              <div style={controlBoardSubtitle}>Main Instrumentation Panel</div>
+            </div>
 
-            <PowerHistoryGraph
-              history={history}
-              historyLength={HISTORY_LENGTH}
-              simTime={simTime}
-            />
+            <div style={displayGrid}>
+              {/* Top Row - Power Display */}
+              <div style={gridFullWidth}>
+                <PowerDisplay power={power} decayHeat={decayHeatPercent}>
+                  {learningMode && (
+                    <div style={{...learningHint, marginTop: "12px"}}>
+                      💡 <strong>Reactor Power:</strong> Shows how much thermal energy the reactor is producing.
+                      100% = 3000 MWth (3 billion watts). Power above 110% triggers automatic shutdown!
+                    </div>
+                  )}
+                </PowerDisplay>
+              </div>
 
-            <TemperatureMetrics fuelTemp={fuelTemp} coolantTemp={coolantTemp} />
+              {/* Middle Row - Power History */}
+              <div style={gridFullWidth}>
+                <PowerHistoryGraph
+                  history={history}
+                  historyLength={HISTORY_LENGTH}
+                  simTime={simTime}
+                />
+              </div>
 
-            <ReactivityPanel reactivity={reactivity} />
+              {/* Bottom Row - Temperature and Reactivity */}
+              <div style={gridHalfWidth}>
+                <TemperatureMetrics fuelTemp={fuelTemp} coolantTemp={coolantTemp}>
+                  {learningMode && (
+                    <div style={learningHint}>
+                      💡 <strong>Temperatures:</strong> Fuel heats up from fission. Coolant removes this heat.
+                      As temperatures rise, negative feedback reduces reactivity - this is the reactor's natural safety mechanism!
+                    </div>
+                  )}
+                </TemperatureMetrics>
+              </div>
+
+              <div style={gridHalfWidth}>
+                <ReactivityPanel reactivity={reactivity}>
+                  {learningMode && (
+                    <div style={{...learningHint, marginTop: "12px"}}>
+                      💡 <strong>Reactivity:</strong> Measures the balance of the chain reaction in "pcm" (parts per million).
+                      Positive = power rising, Negative = power falling, Zero = stable.
+                      External = rod position, Doppler & Moderator = temperature feedback effects.
+                    </div>
+                  )}
+                </ReactivityPanel>
+              </div>
+            </div>
           </div>
 
-          {/* Right Column - Mission Objectives (only in training mode) */}
+          {/* RIGHT PANEL - Mission Objectives */}
           {selectedScenario && state && (
-            <div style={objectivesColumn}>
+            <div style={rightPanel}>
               <LiveCheckpointPanel
                 objectives={selectedScenario.objectives}
                 reactorState={state}
@@ -400,146 +488,247 @@ export default function TrainingPage() {
               />
             </div>
           )}
-        </section>
+        </div>
       </main>
     </>
   );
 }
 
 // ============================================================================
-// PAGE-SPECIFIC STYLES (layout, header, training-specific elements)
+// STYLES - Control Room Layout (Training Mode)
 // ============================================================================
 
 const container: React.CSSProperties = {
-  maxWidth: "100vw",
-  minHeight: "100vh",
-  margin: "0",
-  padding: "20px",
-  paddingTop: "80px",
-  background: "#0f1419",
-  position: "relative",
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  overflow: 'hidden',
+  background: 'linear-gradient(180deg, #0a0f14 0%, #121820 100%)',
 };
 
-const header: React.CSSProperties = {
-  marginBottom: "20px",
-  background: "rgba(20, 25, 30, 0.8)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "8px",
-  padding: "16px 24px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-  position: "relative",
+const topBar: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: '60px',
+  background: 'rgba(10, 15, 20, 0.95)',
+  borderBottom: '2px solid rgba(16, 185, 129, 0.4)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '0 24px',
+  zIndex: 100,
+  boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
 };
 
-const headerRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: "20px",
+const topBarLeft: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '16px',
 };
 
-const titleContainer: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "16px",
+const topBarLogo: React.CSSProperties = {
+  width: '36px',
+  height: '36px',
+  filter: 'brightness(0) saturate(100%) invert(60%) sepia(98%) saturate(2000%) hue-rotate(0deg) brightness(98%) contrast(101%)',
 };
 
-const logoIcon: React.CSSProperties = {
-  width: "40px",
-  height: "40px",
-  filter: "brightness(0) saturate(100%) invert(40%) sepia(98%) saturate(2000%) hue-rotate(200deg)",
-};
-
-const title: React.CSSProperties = {
-  fontSize: "20px",
-  margin: "0 0 4px",
-  color: "#10b981",
-  fontWeight: "600",
+const topBarTitle: React.CSSProperties = {
+  fontSize: '18px',
+  fontWeight: 'bold',
+  color: '#10b981',
   fontFamily: "'Inter', sans-serif",
-};
-
-const subtitle: React.CSSProperties = {
-  fontSize: "13px",
   margin: 0,
+  letterSpacing: '0.5px',
+};
+
+const topBarSubtitle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#6ee7b7',
   fontFamily: "'Inter', sans-serif",
-  color: "#6ee7b7",
-  fontWeight: "400",
+  opacity: 0.8,
+  letterSpacing: '0.5px',
 };
 
 const exitButton: React.CSSProperties = {
-  padding: "8px 16px",
-  borderRadius: "6px",
-  fontSize: "14px",
-  fontWeight: "500",
+  padding: '10px 20px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: 'bold',
+  letterSpacing: '0.5px',
   fontFamily: "'Inter', sans-serif",
-  background: "rgba(20, 25, 30, 0.6)",
-  color: "#6ee7b7",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  cursor: "pointer",
-  transition: "all 0.2s",
+  background: 'rgba(239, 68, 68, 0.2)',
+  color: '#ef4444',
+  border: '2px solid #ef4444',
+  cursor: 'pointer',
+  transition: 'all 0.2s',
 };
 
-const layout: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "400px 1fr 380px",
-  gap: "16px",
-  minHeight: "calc(100vh - 120px)",
+const tripBannerOverlay: React.CSSProperties = {
+  position: 'fixed',
+  top: '70px',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  zIndex: 90,
+  maxWidth: '800px',
+  width: '90%',
 };
 
-const controlColumn: React.CSSProperties = {
-  background: "rgba(20, 25, 30, 0.6)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "8px",
-  padding: "20px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  position: "relative",
+const mainLayout: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '320px 1fr 320px',
+  gap: '16px',
+  padding: '16px',
+  paddingTop: '76px',
+  height: 'calc(100vh - 60px)',
+  marginTop: '60px',
 };
 
-const objectivesColumn: React.CSSProperties = {
-  background: "rgba(20, 25, 30, 0.6)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "8px",
-  padding: "0",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  position: "relative",
-  overflow: "hidden",
+const leftPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.8)',
+  border: '2px solid rgba(16, 185, 129, 0.3)',
+  borderRadius: '8px',
+  padding: '16px',
+  overflowY: 'auto',
+  boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
 };
 
-const displayColumn: React.CSSProperties = {
-  background: "rgba(20, 25, 30, 0.6)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "8px",
-  padding: "20px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  position: "relative",
+const centerPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.6)',
+  border: '2px solid rgba(16, 185, 129, 0.4)',
+  borderRadius: '8px',
+  padding: '20px',
+  overflowY: 'auto',
+  boxShadow: '0 4px 30px rgba(0,0,0,0.5), inset 0 0 60px rgba(16, 185, 129, 0.05)',
+};
+
+const rightPanel: React.CSSProperties = {
+  background: 'rgba(15, 20, 25, 0.8)',
+  border: '2px solid rgba(255, 153, 0, 0.4)',
+  borderRadius: '8px',
+  padding: '0',
+  overflowY: 'auto',
+  boxShadow: '0 4px 20px rgba(255, 153, 0, 0.2)',
 };
 
 const panelHeader: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  marginBottom: "16px",
-  padding: "8px 12px",
-  background: "rgba(15, 20, 25, 0.4)",
-  border: "1px solid rgba(16, 185, 129, 0.2)",
-  borderRadius: "6px",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.1)",
+  marginBottom: '16px',
+  paddingBottom: '12px',
+  borderBottom: '2px solid rgba(16, 185, 129, 0.3)',
 };
 
-const panelIndicator = (active: boolean): React.CSSProperties => ({
-  width: "10px",
-  height: "10px",
-  borderRadius: "50%",
-  background: active ? "#10b981" : "#374151",
-  boxShadow: active ? "0 0 8px rgba(16, 185, 129, 0.6)" : "none",
-  border: active ? "2px solid #6ee7b7" : "2px solid #4b5563",
+const panelTitle: React.CSSProperties = {
+  fontSize: '13px',
+  letterSpacing: '1.5px',
+  color: '#6ee7b7',
+  fontWeight: 'bold',
+  fontFamily: "'Inter', sans-serif",
+};
+
+const controlBoardHeader: React.CSSProperties = {
+  textAlign: 'center',
+  marginBottom: '24px',
+  paddingBottom: '16px',
+  borderBottom: '3px solid rgba(16, 185, 129, 0.4)',
+};
+
+const controlBoardTitle: React.CSSProperties = {
+  fontSize: '20px',
+  fontWeight: 'bold',
+  color: '#10b981',
+  fontFamily: "'Inter', sans-serif",
+  letterSpacing: '2px',
+  marginBottom: '4px',
+  textTransform: 'uppercase',
+};
+
+const controlBoardSubtitle: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#6ee7b7',
+  fontFamily: "'Inter', sans-serif",
+  opacity: 0.7,
+  letterSpacing: '1px',
+};
+
+const displayGrid: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px',
+};
+
+const gridFullWidth: React.CSSProperties = {
+  width: '100%',
+};
+
+const gridHalfWidth: React.CSSProperties = {
+  width: '100%',
+  display: 'inline-block',
+};
+
+const learningModeSection: React.CSSProperties = {
+  marginBottom: '16px',
+  padding: '12px',
+  background: 'rgba(0, 255, 170, 0.08)',
+  border: '1px solid rgba(0, 255, 170, 0.3)',
+  borderRadius: '6px',
+};
+
+const learningModeButton = (active: boolean): React.CSSProperties => ({
+  width: '100%',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: '12px 16px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: 'bold',
+  letterSpacing: '1px',
+  fontFamily: "'Inter', sans-serif",
+  cursor: 'pointer',
+  border: active ? '2px solid #6ee7b7' : '2px solid #444',
+  background: active
+    ? 'linear-gradient(180deg, rgba(0, 255, 170, 0.2) 0%, rgba(0, 255, 170, 0.1) 100%)'
+    : 'linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%)',
+  color: active ? '#6ee7b7' : '#888',
+  boxShadow: active
+    ? '0 0 15px rgba(0, 255, 170, 0.4), 0 4px 0 rgba(0,0,0,0.3)'
+    : '0 4px 0 rgba(0,0,0,0.3)',
+  transition: 'all 0.2s',
 });
 
-const panelTitle: React.CSSProperties = {
-  fontSize: "13px",
-  letterSpacing: "0px",
-  color: "#6ee7b7",
-  fontWeight: "bold",
+const learningHint: React.CSSProperties = {
+  marginTop: '12px',
+  padding: '10px 12px',
+  background: 'rgba(0, 255, 170, 0.1)',
+  border: '1px solid rgba(0, 255, 170, 0.3)',
+  borderRadius: '4px',
+  fontSize: '11px',
+  color: '#6ee7b7',
+  lineHeight: 1.6,
   fontFamily: "'Inter', sans-serif",
-  textTransform: "none",
-  flex: 1,
+};
+
+const statusOn: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#10b981',
+  fontWeight: 'bold',
+  fontFamily: "'Inter', sans-serif",
+  letterSpacing: '1px',
+};
+
+const statusOff: React.CSSProperties = {
+  fontSize: '12px',
+  color: '#ff5555',
+  fontWeight: 'bold',
+  fontFamily: "'Inter', sans-serif",
+  letterSpacing: '1px',
+};
+
+const controlGroup: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '8px',
 };

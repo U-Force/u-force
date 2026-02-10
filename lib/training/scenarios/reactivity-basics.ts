@@ -18,6 +18,7 @@ export const reactivityBasicsScenario: TrainingScenario = {
   difficulty: 1,
   estimatedDuration: 15,
   recommendedRole: TrainingRole.RO_TRAINEE,
+  videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', // Replace with reactivity fundamentals video
 
   initialState: {
     reactorState: {

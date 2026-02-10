@@ -60,6 +60,7 @@ export interface TrainingScenario {
 
   // Educational content
   briefing: string;
+  videoUrl?: string; // Educational video URL (YouTube, Vimeo, or direct video file)
   proceduralGuidance?: ProcedureStep[];
   hints?: ContextualHint[];
 }
