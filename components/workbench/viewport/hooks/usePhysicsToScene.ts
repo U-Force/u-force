@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { ReactorState, ReactivityComponents } from "../../../../lib/reactor/types";
+import type { ReactorState } from "../../../../lib/reactor/types";
 import type { ViewMode } from "../../WorkbenchContext";
 
 /**
@@ -9,11 +9,11 @@ import type { ViewMode } from "../../WorkbenchContext";
  */
 export interface SceneProps {
   // Core
-  power: number; // 0-1 normalized
-  rodPosition: number; // 0=inserted, 1=withdrawn
-  coolantTemp: number; // K, for pipe color interpolation
+  power: number;
+  rodPosition: number;
+  coolantTemp: number;
   pumpOn: boolean;
-  flowSpeed: number; // 0 when pump off, proportional to power when on
+  flowSpeed: number;
 
   // View
   containmentVisible: boolean;
@@ -39,10 +39,9 @@ export function usePhysicsToScene(
       };
     }
 
-    const power = Math.min(state.P, 1.5); // clamp for visual
+    const power = Math.min(state.P, 1.5);
     const coolantTemp = state.Tc;
 
-    // Flow speed: pump provides baseline, power adds to it
     const flowSpeed = pumpOn
       ? 0.3 + power * 0.7
       : power > 0.01

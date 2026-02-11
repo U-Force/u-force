@@ -3,15 +3,13 @@
 import React, { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { CONTAINMENT } from "../layout";
 
 interface ContainmentProps {
-  /** Whether containment dome is visible */
   visible?: boolean;
-  /** View mode: "normal" shows translucent dome, "xray" nearly invisible */
   viewMode?: "normal" | "xray" | "section";
 }
 
-const DOME_RADIUS = 12;
 const NORMAL_OPACITY = 0.08;
 const XRAY_OPACITY = 0.02;
 
@@ -50,7 +48,7 @@ function Containment({
     <group>
       {/* Solid translucent dome */}
       <mesh>
-        <sphereGeometry args={[DOME_RADIUS, 32, 24]} />
+        <sphereGeometry args={[CONTAINMENT.radius, 32, 24]} />
         <meshPhysicalMaterial
           ref={matRef}
           color="#88aacc"
@@ -67,7 +65,7 @@ function Containment({
 
       {/* Wireframe overlay */}
       <mesh>
-        <sphereGeometry args={[DOME_RADIUS * 1.001, 24, 18]} />
+        <sphereGeometry args={[CONTAINMENT.radius * 1.001, 24, 18]} />
         <meshBasicMaterial
           ref={wireMatRef}
           color="#6688aa"

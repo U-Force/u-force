@@ -4,6 +4,7 @@ import React, { Suspense } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Environment, Stars } from "@react-three/drei";
 import PWRScene from "./PWRScene";
+import { CAMERA, TURBINE_ISLAND as TI } from "./layout";
 import type { SceneProps } from "./hooks/usePhysicsToScene";
 
 interface ReactorViewportProps extends SceneProps {
@@ -22,6 +23,13 @@ function SceneContent(props: ReactorViewportProps) {
       <directionalLight position={[10, 15, 10]} intensity={0.8} castShadow />
       <directionalLight position={[-5, 10, -5]} intensity={0.3} />
       <pointLight position={[0, 2, 0]} intensity={0.5} color="#ff6f00" distance={8} />
+      {/* Turbine area light */}
+      <pointLight
+        position={[TI.position[0], 8, TI.position[2]]}
+        intensity={0.4}
+        color="#ffffff"
+        distance={20}
+      />
 
       {/* Environment for reflections */}
       <Environment preset="night" />
@@ -38,9 +46,9 @@ function SceneContent(props: ReactorViewportProps) {
         enablePan={toolMode === "pan"}
         enableRotate={toolMode === "orbit" || toolMode === "select"}
         enableZoom
-        minDistance={5}
-        maxDistance={40}
-        target={[0, 1, 0]}
+        minDistance={CAMERA.minDistance}
+        maxDistance={CAMERA.maxDistance}
+        target={CAMERA.target}
       />
     </>
   );
@@ -50,7 +58,7 @@ export default function ReactorViewport(props: ReactorViewportProps) {
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <Canvas
-        camera={{ position: [18, 12, 18], fov: 50, near: 0.1, far: 200 }}
+        camera={{ position: CAMERA.position, fov: CAMERA.fov, near: 0.1, far: 300 }}
         style={{ background: "transparent" }}
         gl={{ antialias: true, alpha: true }}
         shadows

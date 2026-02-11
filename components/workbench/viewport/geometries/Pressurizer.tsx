@@ -1,37 +1,33 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useMemo } from "react";
 import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { COLORS } from "../../../../lib/workbench/theme";
 import { useSelectionHighlight } from "../hooks/useSelectionHighlight";
+import { PRESSURIZER } from "../layout";
 
 interface PressurizerProps {
-  /** Normalized heater power 0-1, drives bottom glow */
   power?: number;
   selected?: boolean;
   onSelect?: (id: string) => void;
-  position?: [number, number, number];
 }
 
-const PZR_RADIUS = 0.5;
-const PZR_HEIGHT = 3.5;
+const PZR_RADIUS = PRESSURIZER.radius;
+const PZR_HEIGHT = PRESSURIZER.height;
 const SURGE_RADIUS = 0.1;
-const SURGE_LENGTH = 2.5;
 const HEATER_COLOR = new THREE.Color("#ff4400");
 
 function Pressurizer({
   power = 0,
   selected = false,
   onSelect,
-  position = [3.5, 2, 0],
 }: PressurizerProps) {
   const bodyMatRef = useSelectionHighlight(selected, 0.25);
   const heaterMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const currentHeaterIntensity = useRef(0);
 
   useFrame(() => {
-    // Heater glow driven by power
     if (heaterMatRef.current) {
       const p = THREE.MathUtils.clamp(power, 0, 1);
       const targetIntensity = p * 1.5;
@@ -49,8 +45,30 @@ function Pressurizer({
     onSelect?.("pressurizer");
   };
 
+  // Build curved surge line via CatmullRom → TubeGeometry
+  const surgeGeo = useMemo(() => {
+    const pzrBottom: [number, number, number] = [0, -PZR_HEIGHT / 2 - 0.2, 0];
+    const target = [
+      PRESSURIZER.surgeLineTarget[0] - PRESSURIZER.position[0],
+      PRESSURIZER.surgeLineTarget[1] - PRESSURIZER.position[1],
+      PRESSURIZER.surgeLineTarget[2] - PRESSURIZER.position[2],
+    ];
+    const midY = (pzrBottom[1] + target[1]) / 2;
+    const curve = new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(pzrBottom[0], pzrBottom[1], pzrBottom[2]),
+        new THREE.Vector3(pzrBottom[0] * 0.5 + target[0] * 0.5, midY - 0.5, pzrBottom[2] * 0.5 + target[2] * 0.5),
+        new THREE.Vector3(target[0], target[1], target[2]),
+      ],
+      false,
+      "catmullrom",
+      0.5
+    );
+    return new THREE.TubeGeometry(curve, 20, SURGE_RADIUS, 8, false);
+  }, []);
+
   return (
-    <group position={position} onClick={handleClick}>
+    <group position={PRESSURIZER.position} onClick={handleClick}>
       {/* Pressurizer body */}
       <mesh>
         <cylinderGeometry args={[PZR_RADIUS, PZR_RADIUS, PZR_HEIGHT, 20, 1]} />
@@ -103,12 +121,8 @@ function Pressurizer({
         />
       </mesh>
 
-      {/* Surge line (angled cylinder connecting pressurizer bottom to hot leg) */}
-      <mesh
-        position={[-0.8, -PZR_HEIGHT / 2 - 0.8, 0]}
-        rotation={[0, 0, Math.PI / 4]}
-      >
-        <cylinderGeometry args={[SURGE_RADIUS, SURGE_RADIUS, SURGE_LENGTH, 8, 1]} />
+      {/* Curved surge line (pressurizer bottom → Loop 2 hot leg) */}
+      <mesh geometry={surgeGeo}>
         <meshStandardMaterial
           color="#505050"
           metalness={0.85}

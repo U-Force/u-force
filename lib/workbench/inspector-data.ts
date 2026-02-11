@@ -13,6 +13,35 @@ export interface InspectorMeta {
   educationalNote?: string;
 }
 
+function sgEntry(id: string, num: number): InspectorMeta {
+  return {
+    id,
+    name: `Steam Generator ${num}`,
+    description:
+      "U-tube heat exchanger transferring heat from primary (radioactive) to secondary (non-radioactive) coolant. The tubes provide the pressure boundary between the two systems.",
+    parameters: [
+      { label: "Hot Leg Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
+    ],
+    educationalNote:
+      "Each SG has thousands of thin tubes with ~11,000 m\u00B2 of heat transfer area. Tube degradation is a major maintenance concern.",
+  };
+}
+
+function rcpEntry(id: string, num: number): InspectorMeta {
+  return {
+    id,
+    name: `Reactor Coolant Pump ${num}`,
+    description:
+      "The RCP forces primary coolant through the core to remove heat. Each loop has a dedicated pump providing ~6× better heat transfer than natural circulation alone.",
+    parameters: [
+      { label: "Coolant Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
+    ],
+    controlCard: "pump",
+    educationalNote:
+      "A pump trip is a significant event: reduced cooling can cause temperatures to rise rapidly. Natural circulation can maintain decay heat removal after shutdown.",
+  };
+}
+
 export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
   vessel: {
     id: "vessel",
@@ -52,38 +81,19 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
     educationalNote:
       "In an emergency, rods are released and fall by gravity in ~2 seconds (SCRAM). The word comes from the first reactor's Safety Control Rod Ax Man.",
   },
-  pump: {
-    id: "pump",
-    name: "Reactor Coolant Pump",
-    description:
-      "The RCP forces primary coolant through the core to remove heat. Forced circulation provides ~6x better heat transfer than natural circulation alone.",
-    parameters: [
-      { label: "Coolant Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
-    ],
-    controlCard: "pump",
-    educationalNote:
-      "A pump trip is a significant event: reduced cooling can cause temperatures to rise rapidly. Natural circulation can maintain decay heat removal after shutdown.",
-  },
-  "sg-a": {
-    id: "sg-a",
-    name: "Steam Generator A",
-    description:
-      "U-tube heat exchanger transferring heat from primary (radioactive) to secondary (non-radioactive) coolant. The tubes provide the pressure boundary between the two systems.",
-    parameters: [
-      { label: "Hot Leg Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
-    ],
-    educationalNote:
-      "Each SG has thousands of thin tubes with ~11,000 m2 of heat transfer area. Tube degradation is a major maintenance concern.",
-  },
-  "sg-b": {
-    id: "sg-b",
-    name: "Steam Generator B",
-    description:
-      "Second steam generator loop providing redundant heat removal. In normal operation, both SGs share the thermal load equally.",
-    parameters: [
-      { label: "Hot Leg Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
-    ],
-  },
+
+  // 4 Steam Generators
+  "sg-1": sgEntry("sg-1", 1),
+  "sg-2": sgEntry("sg-2", 2),
+  "sg-3": sgEntry("sg-3", 3),
+  "sg-4": sgEntry("sg-4", 4),
+
+  // 4 Reactor Coolant Pumps
+  "rcp-1": rcpEntry("rcp-1", 1),
+  "rcp-2": rcpEntry("rcp-2", 2),
+  "rcp-3": rcpEntry("rcp-3", 3),
+  "rcp-4": rcpEntry("rcp-4", 4),
+
   pressurizer: {
     id: "pressurizer",
     name: "Pressurizer",
@@ -96,16 +106,76 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
     educationalNote:
       "The pressurizer is the only place in the RCS where boiling is intentional. The CVCS injects/removes borated water through the pressurizer.",
   },
-  turbine: {
-    id: "turbine",
-    name: "Turbine-Generator",
+
+  // Secondary side
+  "hp-turbine": {
+    id: "hp-turbine",
+    name: "HP Turbine",
     description:
-      "Converts steam thermal energy to electrical energy. The HP turbine receives steam directly from the SGs; LP turbines handle expanded steam after moisture separation.",
+      "The high-pressure turbine receives steam directly from the steam generators at ~7 MPa and ~285\u00B0C. It extracts about 30% of the steam energy before passing to the MSR and LP turbines.",
     parameters: [
       { label: "Power", key: "P", unit: "%", format: (v) => (v * 100).toFixed(1) },
     ],
     educationalNote:
-      "A 1000 MWe plant converts ~33% of thermal energy to electricity. The remaining 67% is rejected as waste heat to the environment.",
+      "HP turbine blades are shorter than LP blades because the steam is at higher density/pressure.",
+  },
+  "lp-turbine": {
+    id: "lp-turbine",
+    name: "LP Turbines",
+    description:
+      "Two low-pressure turbines receive reheated steam from the MSR. The steam expands to condenser vacuum (~5 kPa), extracting the remaining energy.",
+    parameters: [
+      { label: "Power", key: "P", unit: "%", format: (v) => (v * 100).toFixed(1) },
+    ],
+    educationalNote:
+      "LP turbine last-stage blades can be over 1 meter long. Wet steam erosion is the primary maintenance concern.",
+  },
+  msr: {
+    id: "msr",
+    name: "Moisture Separator Reheater",
+    description:
+      "Removes moisture from HP exhaust and reheats the steam before it enters the LP turbines. This improves cycle efficiency and reduces blade erosion.",
+    parameters: [],
+    educationalNote:
+      "The MSR uses live steam from the main steam lines as the heating medium.",
+  },
+  generator: {
+    id: "generator",
+    name: "Main Generator",
+    description:
+      "Converts the turbine shaft mechanical energy to electrical energy at ~22 kV. A hydrogen-cooled synchronous generator producing ~1100 MWe at full load.",
+    parameters: [
+      { label: "Power", key: "P", unit: "%", format: (v) => (v * 100).toFixed(1) },
+    ],
+    educationalNote:
+      "The generator rotor spins at 1800 RPM (60 Hz grid) or 1500 RPM (50 Hz grid). Hydrogen cooling allows higher power density.",
+  },
+  condenser: {
+    id: "condenser",
+    name: "Main Condenser",
+    description:
+      "Condenses LP turbine exhaust steam back to liquid water at ~33\u00B0C using circulating water from the cooling tower or ocean. Maintains vacuum to maximize turbine efficiency.",
+    parameters: [],
+    educationalNote:
+      "The condenser is the plant's primary heat sink, rejecting ~2000 MW of waste heat to the environment.",
+  },
+  "feed-pump": {
+    id: "feed-pump",
+    name: "Main Feedwater Pump",
+    description:
+      "Pumps condensate from the condenser hotwell back to the steam generators at high pressure (~7 MPa). Driven by a steam turbine or large electric motor.",
+    parameters: [],
+    educationalNote:
+      "The feedwater pumps are among the largest auxiliary equipment in the plant, consuming ~30 MW.",
+  },
+  "condensate-pump": {
+    id: "condensate-pump",
+    name: "Condensate Pump",
+    description:
+      "Low-pressure pump that moves condensate from the condenser hotwell through the feedwater heaters to the main feed pump suction.",
+    parameters: [],
+    educationalNote:
+      "Multiple condensate pumps are typically installed in parallel for redundancy.",
   },
   containment: {
     id: "containment",
@@ -119,7 +189,7 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
   hotleg: {
     id: "hotleg",
     name: "Hot Leg",
-    description: "Carries heated coolant from the reactor vessel to the steam generators. Typical temperature ~325°C at full power.",
+    description: "Carries heated coolant from the reactor vessel to the steam generators. Typical temperature ~325\u00B0C at full power.",
     parameters: [
       { label: "Coolant Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
     ],
@@ -127,7 +197,7 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
   coldleg: {
     id: "coldleg",
     name: "Cold Leg",
-    description: "Returns cooled coolant from the steam generators back to the reactor vessel via the RCP. Typical temperature ~290°C at full power.",
+    description: "Returns cooled coolant from the steam generators back to the reactor vessel via the RCP. Typical temperature ~290\u00B0C at full power.",
     parameters: [
       { label: "Coolant Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
     ],

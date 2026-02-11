@@ -5,21 +5,22 @@ import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { COLORS } from "../../../../lib/workbench/theme";
 import { useSelectionHighlight } from "../hooks/useSelectionHighlight";
+import { RCP } from "../layout";
 
 interface CoolantPumpProps {
   pumpOn: boolean;
+  pumpId: string; // "rcp-1" | "rcp-2" | "rcp-3" | "rcp-4"
   position?: [number, number, number];
   selected?: boolean;
   onSelect?: (id: string) => void;
 }
 
-const PUMP_RADIUS = 0.45;
-const PUMP_HEIGHT = 0.9;
-const IMPELLER_RADIUS = 0.35;
+const IMPELLER_RADIUS = 0.4;
 const BLADE_COUNT = 6;
 
 function CoolantPump({
   pumpOn,
+  pumpId,
   position = [4, -2, 0],
   selected = false,
   onSelect,
@@ -29,7 +30,6 @@ function CoolantPump({
   const currentSpeed = useRef(0);
 
   useFrame((_, delta) => {
-    // Smooth spin-up / spin-down
     const targetSpeed = pumpOn ? 4.0 : 0;
     currentSpeed.current = THREE.MathUtils.lerp(
       currentSpeed.current,
@@ -44,7 +44,7 @@ function CoolantPump({
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    onSelect?.("pump");
+    onSelect?.(pumpId);
   };
 
   // Precompute blade rotations
@@ -57,7 +57,7 @@ function CoolantPump({
     <group position={position} onClick={handleClick}>
       {/* Pump casing */}
       <mesh>
-        <cylinderGeometry args={[PUMP_RADIUS, PUMP_RADIUS, PUMP_HEIGHT, 20, 1]} />
+        <cylinderGeometry args={[RCP.casingRadius, RCP.casingRadius, RCP.casingHeight, 20, 1]} />
         <meshStandardMaterial
           ref={bodyMatRef}
           color="#505050"
@@ -65,6 +65,28 @@ function CoolantPump({
           roughness={0.3}
           emissive={COLORS.highlightEmissive}
           emissiveIntensity={0}
+        />
+      </mesh>
+
+      {/* Motor housing (above casing) */}
+      <mesh position={[0, RCP.casingHeight / 2 + RCP.motorHeight / 2 + 0.05, 0]}>
+        <cylinderGeometry args={[RCP.motorRadius, RCP.motorRadius, RCP.motorHeight, 16, 1]} />
+        <meshStandardMaterial
+          color="#3a3a3a"
+          metalness={0.8}
+          roughness={0.35}
+        />
+      </mesh>
+
+      {/* Motor top cap */}
+      <mesh position={[0, RCP.casingHeight / 2 + RCP.motorHeight + 0.05, 0]}>
+        <sphereGeometry
+          args={[RCP.motorRadius, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2]}
+        />
+        <meshStandardMaterial
+          color="#3a3a3a"
+          metalness={0.8}
+          roughness={0.35}
         />
       </mesh>
 
@@ -102,7 +124,7 @@ function CoolantPump({
       </group>
 
       {/* Inlet nozzle */}
-      <mesh position={[0, -PUMP_HEIGHT / 2 - 0.2, 0]}>
+      <mesh position={[0, -RCP.casingHeight / 2 - 0.2, 0]}>
         <cylinderGeometry args={[0.15, 0.12, 0.4, 12, 1]} />
         <meshStandardMaterial
           color="#454545"
@@ -113,7 +135,7 @@ function CoolantPump({
 
       {/* Outlet nozzle (side discharge) */}
       <mesh
-        position={[PUMP_RADIUS + 0.15, 0, 0]}
+        position={[RCP.casingRadius + 0.15, 0, 0]}
         rotation={[0, 0, Math.PI / 2]}
       >
         <cylinderGeometry args={[0.12, 0.12, 0.3, 12, 1]} />

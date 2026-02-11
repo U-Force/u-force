@@ -3,6 +3,7 @@
 import React, { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { LOOPS, VESSEL } from "../viewport/layout";
 
 interface FlowArrowsProps {
   flowSpeed: number;
@@ -17,34 +18,44 @@ const FlowArrows = React.memo(function FlowArrows({
   const groupRef = useRef<THREE.Group>(null);
   const offsetRef = useRef(0);
 
-  // Arrow positions along the hot/cold legs
-  const arrowPaths: [number, number, number][] = [
-    // Hot leg A (vessel → SG-A)
-    [2.5, 2, -1.5],
-    [4.5, 2, -2],
-    // Hot leg B (vessel → SG-B)
-    [-2.5, 2, -1.5],
-    [-4.5, 2, -2],
-    // Cold leg A (SG-A → pump → vessel)
-    [5, -2, -3],
-    [3, -3, -2],
-    // Cold leg B (SG-B → vessel)
-    [-5, -2, -3],
-    [-3, -3, -2],
-  ];
+  // Build arrow positions for all 4 loops (2 hot + 2 cold per loop = 16 total)
+  const arrowPaths: [number, number, number][] = [];
+  for (const loop of LOOPS) {
+    const [sx, , sz] = loop.sgPosition;
+    // Hot leg arrows (mid-path, elevated)
+    arrowPaths.push([
+      loop.dirX * (VESSEL.radius + 3),
+      VESSEL.hotNozzleY + 0.5,
+      loop.dirZ * (VESSEL.radius + 3),
+    ]);
+    arrowPaths.push([
+      sx - loop.dirX * 2,
+      1.5,
+      sz - loop.dirZ * 2,
+    ]);
+    // Cold leg arrows (lower path)
+    arrowPaths.push([
+      loop.rcpPosition[0] + loop.dirX * 1.5,
+      loop.rcpPosition[1] + 0.5,
+      loop.rcpPosition[2] + loop.dirZ * 1.5,
+    ]);
+    arrowPaths.push([
+      loop.dirX * (VESSEL.radius + 2),
+      VESSEL.coldNozzleY - 0.5,
+      loop.dirZ * (VESSEL.radius + 2),
+    ]);
+  }
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
     offsetRef.current += delta * flowSpeed * 2;
 
-    // Pulse opacity based on flow
     const pulse = flowSpeed > 0 ? 0.4 + Math.sin(offsetRef.current * 3) * 0.3 : 0.1;
 
     groupRef.current.children.forEach((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.material instanceof THREE.MeshStandardMaterial) {
         mesh.material.opacity = pulse;
-        // Temperature-based coloring
         const t = Math.max(0, Math.min(1, (coolantTemp - 300) / 350));
         mesh.material.color.setRGB(
           0.13 + t * 0.83,

@@ -9,8 +9,10 @@ import Pressurizer from "./geometries/Pressurizer";
 import PrimaryLoop from "./geometries/PrimaryLoop";
 import CoolantPump from "./geometries/CoolantPump";
 import Containment from "./geometries/Containment";
-import Turbine from "./geometries/Turbine";
+import TurbineIsland from "./geometries/TurbineIsland";
+import SecondaryLoop from "./geometries/SecondaryLoop";
 import HotspotMarker from "../overlays/HotspotMarker";
+import { LOOPS, PRESSURIZER, TURBINE_ISLAND as TI, SG } from "./layout";
 import type { SceneProps } from "./hooks/usePhysicsToScene";
 
 interface PWRSceneProps extends SceneProps {
@@ -18,6 +20,9 @@ interface PWRSceneProps extends SceneProps {
   onSelectComponent: (id: string | null) => void;
   showHotspots: boolean;
 }
+
+// SG top Y for hotspot placement
+const SG_TOP_Y = SG.lowerHeight / 2 + SG.coneHeight + SG.upperHeight + SG.upperRadius + 1;
 
 export default function PWRScene({
   power,
@@ -34,10 +39,7 @@ export default function PWRScene({
   return (
     <group>
       {/* Containment dome */}
-      <Containment
-        visible={containmentVisible}
-        viewMode={viewMode}
-      />
+      <Containment visible={containmentVisible} viewMode={viewMode} />
 
       {/* Reactor Vessel at origin */}
       <ReactorVessel
@@ -51,45 +53,48 @@ export default function PWRScene({
       {/* Control Rods */}
       <ControlRodAssembly rodPosition={rodPosition} />
 
-      {/* Primary Loop Piping */}
+      {/* Primary Loop Piping (4 loops) */}
       <PrimaryLoop coolantTemp={coolantTemp} flowSpeed={flowSpeed} />
 
-      {/* Coolant Pump (on cold leg A) */}
-      <CoolantPump
-        position={[4.5, -3, -3]}
-        pumpOn={pumpOn}
-        onSelect={onSelectComponent}
-        selected={selectedComponent === "pump"}
-      />
+      {/* 4 Steam Generators + 4 RCPs */}
+      {LOOPS.map((loop) => (
+        <React.Fragment key={`loop-${loop.id}`}>
+          <SteamGenerator
+            position={loop.sgPosition}
+            sgId={`sg-${loop.id}`}
+            onSelect={onSelectComponent}
+            selected={selectedComponent === `sg-${loop.id}`}
+          />
+          <CoolantPump
+            position={loop.rcpPosition}
+            pumpId={`rcp-${loop.id}`}
+            pumpOn={pumpOn}
+            onSelect={onSelectComponent}
+            selected={selectedComponent === `rcp-${loop.id}`}
+          />
+        </React.Fragment>
+      ))}
 
-      {/* Steam Generator A (right side) */}
-      <SteamGenerator
-        position={[6, 0, -3]}
-        sgId="sg-a"
-        onSelect={onSelectComponent}
-        selected={selectedComponent === "sg-a"}
-      />
-
-      {/* Steam Generator B (left side) */}
-      <SteamGenerator
-        position={[-6, 0, -3]}
-        sgId="sg-b"
-        onSelect={onSelectComponent}
-        selected={selectedComponent === "sg-b"}
-      />
-
-      {/* Pressurizer (offset) */}
+      {/* Pressurizer (on Loop 2 hot leg) */}
       <Pressurizer
         power={power}
         onSelect={onSelectComponent}
         selected={selectedComponent === "pressurizer"}
       />
 
-      {/* Turbine (secondary side) */}
-      <Turbine
+      {/* Turbine Island (outside containment) */}
+      <TurbineIsland
         power={power}
+        selectedComponent={selectedComponent}
         onSelect={onSelectComponent}
-        selected={selectedComponent === "turbine"}
+      />
+
+      {/* Secondary Loop (steam lines + feedwater) */}
+      <SecondaryLoop
+        power={power}
+        pumpOn={pumpOn}
+        selectedComponent={selectedComponent}
+        onSelect={onSelectComponent}
       />
 
       {/* Hotspot Markers */}
@@ -113,34 +118,48 @@ export default function PWRScene({
             componentId="rods"
             onClick={onSelectComponent}
           />
+          {/* SG hotspots */}
+          {LOOPS.map((loop) => (
+            <HotspotMarker
+              key={`hs-sg-${loop.id}`}
+              position={[loop.sgPosition[0], SG_TOP_Y, loop.sgPosition[2]]}
+              label={`SG-${loop.id}`}
+              componentId={`sg-${loop.id}`}
+              onClick={onSelectComponent}
+            />
+          ))}
+          {/* RCP hotspots */}
+          {LOOPS.map((loop) => (
+            <HotspotMarker
+              key={`hs-rcp-${loop.id}`}
+              position={[loop.rcpPosition[0], loop.rcpPosition[1] + 1.5, loop.rcpPosition[2]]}
+              label={`RCP-${loop.id}`}
+              componentId={`rcp-${loop.id}`}
+              onClick={onSelectComponent}
+            />
+          ))}
           <HotspotMarker
-            position={[6, 4, -3]}
-            label="SG-A"
-            componentId="sg-a"
-            onClick={onSelectComponent}
-          />
-          <HotspotMarker
-            position={[-6, 4, -3]}
-            label="SG-B"
-            componentId="sg-b"
-            onClick={onSelectComponent}
-          />
-          <HotspotMarker
-            position={[3.5, 4.5, 0]}
+            position={[PRESSURIZER.position[0], PRESSURIZER.position[1] + 3, PRESSURIZER.position[2]]}
             label="Pressurizer"
             componentId="pressurizer"
             onClick={onSelectComponent}
           />
           <HotspotMarker
-            position={[4.5, -2.5, -3]}
-            label="RCP"
-            componentId="pump"
+            position={[TI.position[0], TI.position[1] + 3, TI.position[2]]}
+            label="Turbine Island"
+            componentId="hp-turbine"
             onClick={onSelectComponent}
           />
           <HotspotMarker
-            position={[10, 1, 0]}
-            label="Turbine"
-            componentId="turbine"
+            position={[TI.position[0] + TI.generator.offset[0], 3, TI.position[2] + TI.generator.offset[2]]}
+            label="Generator"
+            componentId="generator"
+            onClick={onSelectComponent}
+          />
+          <HotspotMarker
+            position={[TI.position[0] + TI.condenser.offset[0], TI.condenser.offset[1] + 2, TI.position[2] + TI.condenser.offset[2]]}
+            label="Condenser"
+            componentId="condenser"
             onClick={onSelectComponent}
           />
         </>

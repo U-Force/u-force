@@ -60,6 +60,13 @@ export const COLORS = {
   metalMedium: "#4a4a4a",
   metalLight: "#888888",
   highlightEmissive: "#335599",
+
+  // Secondary-side 3D scene colors
+  steamLine: "#c0c0c0",
+  feedwater: "#1976d2",
+  condenserShell: "#5d4037",
+  generatorCopper: "#b87333",
+  msrGreen: "#4a6741",
 } as const;
 
 // ============================================================================
