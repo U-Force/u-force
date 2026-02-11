@@ -7,10 +7,14 @@ import {
   TrainingRole,
   type TrainingScenario,
   MetricsCollector,
-  getRolePermissions,
   markScenarioCompleted,
   getRoleDisplayName,
   loadCompletionData,
+  TRAINING_MODULES,
+  getAllModuleProgress,
+  resetCompletionData,
+  type ModuleProgress,
+  ModuleId,
 } from "../../lib/training";
 import ScenarioBriefing from "../../components/ScenarioBriefing";
 import ScenarioDebrief from "../../components/ScenarioDebrief";
@@ -188,9 +192,13 @@ export default function TrainingPage() {
 
   // Completion tracking for selector
   const [completedIds, setCompletedIds] = useState<string[]>([]);
+  const [selectedModule, setSelectedModule] = useState<ModuleId | 'all'>('all');
+  const [moduleProgress, setModuleProgress] = useState<ModuleProgress[]>([]);
 
   useEffect(() => {
-    setCompletedIds(loadCompletionData());
+    const ids = loadCompletionData();
+    setCompletedIds(ids);
+    setModuleProgress(getAllModuleProgress(ids));
   }, [appState]);
 
   // Real-time metrics for checkpoint evaluation
@@ -327,6 +335,26 @@ export default function TrainingPage() {
     return d === 1 ? 'Beginner' : d === 2 ? 'Intermediate' : d === 3 ? 'Advanced' : d === 4 ? 'Expert' : 'Unknown';
   };
 
+  // Filter scenarios by selected module
+  const filteredScenarios = selectedModule === 'all'
+    ? SCENARIOS
+    : SCENARIOS.filter((s) => {
+        const mod = TRAINING_MODULES.find((m) => m.id === selectedModule);
+        return mod?.scenarioIds.includes(s.id);
+      });
+
+  const overallCompletion = moduleProgress.length > 0
+    ? Math.round(moduleProgress.reduce((sum, m) => sum + m.completionPercent, 0) / moduleProgress.length)
+    : 0;
+
+  const handleResetProgress = () => {
+    if (confirm('Reset all training progress? This cannot be undone.')) {
+      resetCompletionData();
+      setCompletedIds([]);
+      setModuleProgress(getAllModuleProgress([]));
+    }
+  };
+
   // ── SELECTOR STATE ──────────────────────────────────────────────────
   if (appState === 'selector') {
     return (
@@ -334,11 +362,11 @@ export default function TrainingPage() {
         <style jsx global>{`
           @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
           * { box-sizing: border-box; }
-          body { background: #060a0f; margin: 0; font-family: ${FONTS.sans}; overflow: auto; }
+          body { background: #060a0f; margin: 0; font-family: ${FONTS.sans}; overflow: hidden; }
         `}</style>
 
         <div style={selectorShell}>
-          {/* Top bar matching workbench */}
+          {/* Top bar */}
           <div style={selectorTopBar}>
             <div style={selectorTopBarLeft}>
               <img src="/logo.png" alt="U-FORCE" style={selectorLogo} />
@@ -350,66 +378,141 @@ export default function TrainingPage() {
             </button>
           </div>
 
-          {/* Scenario Grid */}
-          <div style={selectorContent}>
-            <div style={selectorHeader}>
-              <h1 style={selectorTitle}>Training Scenarios</h1>
-              <p style={selectorSubtitle}>Select a scenario to begin training, or explore freely in sandbox mode</p>
-            </div>
-
-            {/* Free Play Card */}
-            <div style={cardStyle(false)} onClick={handleSelectFreePlay}>
-              <div style={cardRow}>
-                <div style={cardInfo}>
-                  <div style={cardNameRow}>
-                    <span style={cardName}>Free Play Mode</span>
-                    <span style={badgeStyle(COLORS.slate)}>SANDBOX</span>
-                  </div>
-                  <p style={cardDesc}>
-                    Full control authority with no objectives or time limits. Experiment with reactor physics freely.
-                  </p>
-                  <div style={cardMetas}>
-                    <span style={metaItem}>Unlimited time</span>
-                    <span style={metaDot} />
-                    <span style={metaItem}>All controls</span>
-                    <span style={metaDot} />
-                    <span style={metaItem}>No scoring</span>
-                  </div>
+          {/* Two-column layout: Sidebar | Main */}
+          <div style={selectorBody}>
+            {/* LEFT SIDEBAR — Module Categories */}
+            <div style={moduleSidebar}>
+              {/* Overall Progress */}
+              <div style={overallProgressSection}>
+                <div style={overallLabel}>OVERALL PROGRESS</div>
+                <div style={overallBarOuter}>
+                  <div style={overallBarFill(overallCompletion)} />
                 </div>
+                <div style={overallPercent}>{overallCompletion}%</div>
               </div>
+
+              {/* All Scenarios Button */}
+              <button
+                style={moduleBtn(selectedModule === 'all', COLORS.emerald)}
+                onClick={() => setSelectedModule('all')}
+              >
+                <div style={moduleBtnTop}>
+                  <span style={moduleBtnName(selectedModule === 'all')}>All Scenarios</span>
+                  <span style={moduleBtnCount}>{SCENARIOS.length} total</span>
+                </div>
+              </button>
+
+              {/* Module Buttons */}
+              {TRAINING_MODULES.map((mod) => {
+                const prog = moduleProgress.find((p) => p.moduleId === mod.id);
+                const pct = prog?.completionPercent ?? 0;
+                const active = selectedModule === mod.id;
+
+                return (
+                  <button
+                    key={mod.id}
+                    style={moduleBtn(active, mod.color)}
+                    onClick={() => setSelectedModule(mod.id)}
+                  >
+                    <div style={moduleBtnTop}>
+                      <span style={moduleBtnName(active)}>{mod.name}</span>
+                      <span style={moduleBtnPct(pct, mod.color)}>{pct}%</span>
+                    </div>
+                    <div style={moduleBtnDesc}>{mod.description}</div>
+                    <div style={moduleBtnBarOuter}>
+                      <div style={moduleBtnBarFill(mod.color, pct)} />
+                    </div>
+                    <div style={moduleBtnMeta}>
+                      {prog?.completedScenarios.length ?? 0}/{prog?.totalScenarios ?? mod.scenarioIds.length} scenarios
+                      {pct === 100 && <span style={moduleCompleteBadge}>COMPLETE</span>}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Reset Progress */}
+              <button style={resetBtn} onClick={handleResetProgress}>
+                Reset Progress
+              </button>
             </div>
 
-            {/* Scenario Cards */}
-            {SCENARIOS.map((scenario) => {
-              const done = completedIds.includes(scenario.id);
-              return (
-                <div
-                  key={scenario.id}
-                  style={cardStyle(done)}
-                  onClick={() => handleSelectScenario(scenario)}
-                >
+            {/* RIGHT — Scenario Cards */}
+            <div style={selectorContent}>
+              <div style={selectorHeader}>
+                <h1 style={selectorTitle}>
+                  {selectedModule === 'all'
+                    ? 'All Training Scenarios'
+                    : TRAINING_MODULES.find((m) => m.id === selectedModule)?.name ?? 'Scenarios'}
+                </h1>
+                <p style={selectorSubtitle}>
+                  {selectedModule === 'all'
+                    ? 'Select a scenario to begin training, or explore freely in sandbox mode'
+                    : TRAINING_MODULES.find((m) => m.id === selectedModule)?.description}
+                </p>
+              </div>
+
+              {/* Free Play Card (only when showing all) */}
+              {selectedModule === 'all' && (
+                <div style={cardStyle(false)} onClick={handleSelectFreePlay}>
                   <div style={cardRow}>
                     <div style={cardInfo}>
                       <div style={cardNameRow}>
-                        <span style={cardName}>{scenario.name}</span>
-                        <span style={badgeStyle(getDifficultyColor(scenario.difficulty))}>
-                          {getDifficultyLabel(scenario.difficulty)}
-                        </span>
-                        {done && <span style={doneBadge}>COMPLETED</span>}
+                        <span style={cardName}>Free Play Mode</span>
+                        <span style={badgeStyle(COLORS.slate)}>SANDBOX</span>
                       </div>
-                      <p style={cardDesc}>{scenario.description}</p>
+                      <p style={cardDesc}>
+                        Full control authority with no objectives or time limits. Experiment with reactor physics freely.
+                      </p>
                       <div style={cardMetas}>
-                        <span style={metaItem}>~{scenario.estimatedDuration} min</span>
+                        <span style={metaItem}>Unlimited time</span>
                         <span style={metaDot} />
-                        <span style={metaItem}>{getRoleDisplayName(scenario.recommendedRole)}</span>
+                        <span style={metaItem}>All controls</span>
                         <span style={metaDot} />
-                        <span style={metaItem}>{scenario.objectives.length} objective{scenario.objectives.length > 1 ? 's' : ''}</span>
+                        <span style={metaItem}>No scoring</span>
                       </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+              )}
+
+              {/* Filtered Scenario Cards */}
+              {filteredScenarios.map((scenario) => {
+                const done = completedIds.includes(scenario.id);
+                return (
+                  <div
+                    key={scenario.id}
+                    style={cardStyle(done)}
+                    onClick={() => handleSelectScenario(scenario)}
+                  >
+                    <div style={cardRow}>
+                      <div style={cardInfo}>
+                        <div style={cardNameRow}>
+                          <span style={cardName}>{scenario.name}</span>
+                          <span style={badgeStyle(getDifficultyColor(scenario.difficulty))}>
+                            {getDifficultyLabel(scenario.difficulty)}
+                          </span>
+                          {done && <span style={doneBadge}>COMPLETED</span>}
+                        </div>
+                        <p style={cardDesc}>{scenario.description}</p>
+                        <div style={cardMetas}>
+                          <span style={metaItem}>~{scenario.estimatedDuration} min</span>
+                          <span style={metaDot} />
+                          <span style={metaItem}>{getRoleDisplayName(scenario.recommendedRole)}</span>
+                          <span style={metaDot} />
+                          <span style={metaItem}>{scenario.objectives.length} objective{scenario.objectives.length > 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredScenarios.length === 0 && (
+                <div style={{ padding: '40px', textAlign: 'center', color: COLORS.slateDark }}>
+                  No scenarios in this module yet.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </>
@@ -434,15 +537,12 @@ export default function TrainingPage() {
   // ── DEBRIEF STATE ───────────────────────────────────────────────────
   if (appState === 'debrief' && metricsCollector && selectedScenario) {
     return (
-      <>
-        <NavigationBar />
-        <ScenarioDebrief
-          metrics={metricsCollector.getMetrics()}
-          scenario={selectedScenario}
-          onRestart={handleRestartScenario}
-          onBackToScenarios={handleBackToSelector}
-        />
-      </>
+      <ScenarioDebrief
+        metrics={metricsCollector.getMetrics()}
+        scenario={selectedScenario}
+        onRestart={handleRestartScenario}
+        onBackToScenarios={handleBackToSelector}
+      />
     );
   }
 
@@ -464,9 +564,12 @@ export default function TrainingPage() {
 // ============================================================================
 
 const selectorShell: React.CSSProperties = {
-  minHeight: '100vh',
+  height: '100vh',
+  display: 'flex',
+  flexDirection: 'column',
   background: 'linear-gradient(180deg, #060a0f 0%, #0c1117 100%)',
   fontFamily: FONTS.sans,
+  overflow: 'hidden',
 };
 
 const selectorTopBar: React.CSSProperties = {
@@ -522,10 +625,166 @@ const selectorBackBtn: React.CSSProperties = {
   letterSpacing: '0.3px',
 };
 
+const selectorBody: React.CSSProperties = {
+  flex: 1,
+  display: 'flex',
+  overflow: 'hidden',
+};
+
+const moduleSidebar: React.CSSProperties = {
+  width: '280px',
+  flexShrink: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  padding: '16px 12px',
+  overflowY: 'auto',
+  borderRight: `1px solid ${COLORS.borderSubtle}`,
+  background: 'rgba(8, 12, 18, 0.6)',
+};
+
+const overallProgressSection: React.CSSProperties = {
+  padding: '12px',
+  background: COLORS.emeraldBgLight,
+  borderRadius: RADIUS.lg,
+  border: `1px solid ${COLORS.borderEmeraldLight}`,
+  marginBottom: '8px',
+};
+
+const overallLabel: React.CSSProperties = {
+  fontSize: FONT_SIZES.xs,
+  fontWeight: 700,
+  color: COLORS.teal,
+  letterSpacing: '1.5px',
+  marginBottom: '8px',
+};
+
+const overallBarOuter: React.CSSProperties = {
+  height: '6px',
+  background: 'rgba(255,255,255,0.06)',
+  borderRadius: '3px',
+  overflow: 'hidden',
+  marginBottom: '6px',
+};
+
+const overallBarFill = (pct: number): React.CSSProperties => ({
+  height: '100%',
+  width: `${pct}%`,
+  background: `linear-gradient(90deg, ${COLORS.emerald}, ${COLORS.teal})`,
+  borderRadius: '3px',
+  transition: 'width 0.4s',
+});
+
+const overallPercent: React.CSSProperties = {
+  fontSize: FONT_SIZES.xl,
+  fontWeight: 700,
+  color: COLORS.emerald,
+  textAlign: 'center',
+  fontFamily: FONTS.mono,
+};
+
+const moduleBtn = (active: boolean, color: string): React.CSSProperties => ({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+  padding: '10px 12px',
+  background: active ? `${color}15` : 'transparent',
+  border: `1px solid ${active ? `${color}50` : COLORS.borderSubtle}`,
+  borderRadius: RADIUS.lg,
+  cursor: 'pointer',
+  textAlign: 'left',
+  fontFamily: FONTS.sans,
+  transition: 'all 0.12s',
+  borderLeft: active ? `3px solid ${color}` : `3px solid transparent`,
+});
+
+const moduleBtnTop: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+};
+
+const moduleBtnName = (active: boolean): React.CSSProperties => ({
+  fontSize: FONT_SIZES.md,
+  fontWeight: 700,
+  color: active ? COLORS.white : COLORS.slate,
+  letterSpacing: '0.3px',
+});
+
+const moduleBtnCount: React.CSSProperties = {
+  fontSize: FONT_SIZES.xs,
+  color: COLORS.slateDark,
+};
+
+const moduleBtnPct = (pct: number, color: string): React.CSSProperties => ({
+  fontSize: FONT_SIZES.sm,
+  fontWeight: 700,
+  fontFamily: FONTS.mono,
+  color: pct === 100 ? color : pct > 0 ? COLORS.amber : COLORS.slateDark,
+});
+
+const moduleBtnDesc: React.CSSProperties = {
+  fontSize: FONT_SIZES.xs,
+  color: COLORS.slateDark,
+  lineHeight: 1.4,
+};
+
+const moduleBtnBarOuter: React.CSSProperties = {
+  height: '4px',
+  background: 'rgba(255,255,255,0.06)',
+  borderRadius: '2px',
+  overflow: 'hidden',
+  marginTop: '2px',
+};
+
+const moduleBtnBarFill = (color: string, pct: number): React.CSSProperties => ({
+  height: '100%',
+  width: `${pct}%`,
+  background: color,
+  borderRadius: '2px',
+  transition: 'width 0.4s',
+  boxShadow: pct > 0 ? `0 0 6px ${color}60` : 'none',
+});
+
+const moduleBtnMeta: React.CSSProperties = {
+  fontSize: FONT_SIZES.xs,
+  color: COLORS.slateDark,
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  marginTop: '2px',
+};
+
+const moduleCompleteBadge: React.CSSProperties = {
+  fontSize: '8px',
+  fontWeight: 700,
+  letterSpacing: '0.8px',
+  color: COLORS.emerald,
+  background: COLORS.emeraldBg,
+  padding: '1px 5px',
+  borderRadius: RADIUS.sm,
+  border: `1px solid ${COLORS.borderEmeraldLight}`,
+};
+
+const resetBtn: React.CSSProperties = {
+  padding: '6px 12px',
+  fontSize: FONT_SIZES.xs,
+  fontWeight: 600,
+  fontFamily: FONTS.sans,
+  color: COLORS.slateDark,
+  background: 'transparent',
+  border: `1px solid ${COLORS.borderSubtle}`,
+  borderRadius: RADIUS.md,
+  cursor: 'pointer',
+  letterSpacing: '0.5px',
+  marginTop: 'auto',
+};
+
 const selectorContent: React.CSSProperties = {
-  maxWidth: '720px',
-  margin: '0 auto',
-  padding: '40px 24px 60px',
+  flex: 1,
+  overflowY: 'auto',
+  padding: '40px 40px 60px',
+  maxWidth: '800px',
 };
 
 const selectorHeader: React.CSSProperties = {
