@@ -18,9 +18,10 @@ import {
 } from "./panels";
 import { InspectorCard } from "./overlays";
 import { BoronCard, ControlRodCard, PumpCard } from "./controls";
-import { GlassPanel } from "./shared";
+import { GlassPanel, LearningTooltip } from "./shared";
 import { COLORS, FONTS, FONT_SIZES, RADIUS, BLUR } from "../../lib/workbench/theme";
 import { sectionHeader } from "../../lib/workbench/styles";
+import { VIEWPORT_HELP, TREE_HELP, MODE_BANNER_HELP, SYSTEM_HEALTH_HELP } from "../../lib/workbench/learning-content";
 import type { TrainingScenario } from "../../lib/training/types";
 
 export default function WorkbenchLayout() {
@@ -116,6 +117,11 @@ export default function WorkbenchLayout() {
         {ui.leftPanelOpen && (
           <div style={leftPanel}>
             <GlassPanel style={{ height: "100%", display: "flex", flexDirection: "column" }} noPadding>
+              {ui.learningMode && (
+                <div style={{ padding: "6px 8px 0" }}>
+                  <LearningTooltip visible={ui.learningMode} title={TREE_HELP.title} description={TREE_HELP.description} position="right" />
+                </div>
+              )}
               <LeftTree
                 selectedNodeId={ui.selectedComponent}
                 onSelectComponent={selectComponent}
@@ -158,6 +164,13 @@ export default function WorkbenchLayout() {
             toolMode={ui.toolMode}
           />
 
+          {/* Learning Mode Viewport Hint */}
+          {ui.learningMode && (
+            <div style={viewportLearningHint}>
+              <LearningTooltip visible={ui.learningMode} title={VIEWPORT_HELP.title} description={VIEWPORT_HELP.description} position="bottom" />
+            </div>
+          )}
+
           {/* Inspector Card Overlay */}
           {ui.inspectorOpen && ui.selectedComponent && (
             <InspectorCard
@@ -178,6 +191,7 @@ export default function WorkbenchLayout() {
               tripActive={sim.tripActive}
               onRodChange={sim.setRod}
               onClose={() => setControlCardOpen(null)}
+              learningMode={ui.learningMode}
             />
           )}
           {ui.controlCardOpen === "boron" && (
@@ -186,6 +200,7 @@ export default function WorkbenchLayout() {
               boronActual={sim.boronActual}
               onBoronChange={sim.setBoronConc}
               onClose={() => setControlCardOpen(null)}
+              learningMode={ui.learningMode}
             />
           )}
           {ui.controlCardOpen === "pump" && (
@@ -195,6 +210,7 @@ export default function WorkbenchLayout() {
               onPumpToggle={() => sim.setPumpOn((v) => !v)}
               onScram={sim.handleScram}
               onClose={() => setControlCardOpen(null)}
+              learningMode={ui.learningMode}
             />
           )}
 
@@ -220,11 +236,16 @@ export default function WorkbenchLayout() {
           <div style={rightPanel}>
             <div style={rightScroll}>
               {/* Mode Banner */}
-              <ModeBanner
-                mode={ui.plantMode}
-                tripActive={sim.tripActive}
-                tripReason={sim.tripReason}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ flex: 1 }}>
+                  <ModeBanner
+                    mode={ui.plantMode}
+                    tripActive={sim.tripActive}
+                    tripReason={sim.tripReason}
+                  />
+                </div>
+                <LearningTooltip visible={ui.learningMode} title={MODE_BANNER_HELP.title} description={MODE_BANNER_HELP.description} position="left" />
+              </div>
 
               {/* Plant Status */}
               <PlantStatusPanel
@@ -237,11 +258,12 @@ export default function WorkbenchLayout() {
                 decayHeatPct={decayHeatPct}
                 simTime={simTime}
                 history={sim.history}
+                learningMode={ui.learningMode}
               />
 
               {/* Alarms */}
               <GlassPanel variant="dark" style={{ marginTop: "8px" }}>
-                <AlarmList alarms={alarms} onAcknowledge={acknowledgeAlarm} />
+                <AlarmList alarms={alarms} onAcknowledge={acknowledgeAlarm} learningMode={ui.learningMode} />
               </GlassPanel>
 
               {/* System Health */}
@@ -255,13 +277,24 @@ export default function WorkbenchLayout() {
               >
                 <div
                   style={{
-                    ...sectionHeader(COLORS.teal),
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
                     marginBottom: "2px",
-                    borderBottom: "none",
-                    paddingBottom: 0,
                   }}
                 >
-                  SYSTEM HEALTH
+                  <div
+                    style={{
+                      ...sectionHeader(COLORS.teal),
+                      marginBottom: 0,
+                      borderBottom: "none",
+                      paddingBottom: 0,
+                      flex: 1,
+                    }}
+                  >
+                    SYSTEM HEALTH
+                  </div>
+                  <LearningTooltip visible={ui.learningMode} title={SYSTEM_HEALTH_HELP.title} description={SYSTEM_HEALTH_HELP.description} position="left" />
                 </div>
                 <SystemHealthTile name="RCS" status={rcsHealth as "ok" | "degraded"} />
                 <SystemHealthTile name="SAFETY" status={safetyHealth as "ok" | "failed"} />
@@ -286,6 +319,7 @@ export default function WorkbenchLayout() {
           onStop={sim.handleStop}
           onReset={sim.handleReset}
           onSpeedChange={sim.setSpeed}
+          learningMode={ui.learningMode}
         />
       </div>
     </div>
@@ -344,6 +378,13 @@ const rightScroll: React.CSSProperties = {
 
 const bottomRow: React.CSSProperties = {
   gridRow: 3,
+};
+
+const viewportLearningHint: React.CSSProperties = {
+  position: "absolute",
+  top: "12px",
+  left: "12px",
+  zIndex: 60,
 };
 
 const debriefOverlay: React.CSSProperties = {

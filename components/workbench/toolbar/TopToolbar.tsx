@@ -3,6 +3,8 @@
 import React from "react";
 import ToolButton from "./ToolButton";
 import type { ToolMode, ViewMode } from "../WorkbenchContext";
+import { LearningTooltip } from "../shared";
+import { TOOLBAR_HELP } from "../../../lib/workbench/learning-content";
 import {
   MousePointer2,
   Move,
@@ -51,6 +53,12 @@ export default function TopToolbar({
           active={toolMode === "orbit"}
           onClick={() => onToolModeChange("orbit")}
         />
+        <LearningTooltip
+          visible={learningMode}
+          title={TOOLBAR_HELP.toolMode.title}
+          description={TOOLBAR_HELP.toolMode.description}
+          position="bottom"
+        />
       </div>
 
       <div style={separator} />
@@ -69,9 +77,16 @@ export default function TopToolbar({
           active={viewMode === "xray"}
           onClick={() => onViewModeChange("xray")}
         />
+        <LearningTooltip
+          visible={learningMode}
+          title={TOOLBAR_HELP.viewMode.title}
+          description={TOOLBAR_HELP.viewMode.description}
+          position="bottom"
+        />
       </div>
 
-      <div style={separator} />
+      {/* Spacer pushes Learn button to the right */}
+      <div style={{ flex: 1 }} />
 
       {/* Learning Mode */}
       <ToolButton

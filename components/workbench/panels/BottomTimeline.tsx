@@ -3,6 +3,8 @@
 import React from "react";
 import { Play, Pause, Square, RotateCcw } from "lucide-react";
 import { COLORS, FONTS, FONT_SIZES, RADIUS, BLUR } from "../../../lib/workbench/theme";
+import LearningTooltip from "../shared/LearningTooltip";
+import { TIMELINE_HELP } from "../../../lib/workbench/learning-content";
 
 interface BottomTimelineProps {
   isRunning: boolean;
@@ -15,6 +17,7 @@ interface BottomTimelineProps {
   onStop: () => void;
   onReset: () => void;
   onSpeedChange: (speed: number) => void;
+  learningMode?: boolean;
 }
 
 const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 5, 10];
@@ -30,6 +33,7 @@ export default function BottomTimeline({
   onStop,
   onReset,
   onSpeedChange,
+  learningMode = false,
 }: BottomTimelineProps) {
   const mins = Math.floor(simTime / 60);
   const secs = Math.floor(simTime % 60);
@@ -82,6 +86,14 @@ export default function BottomTimeline({
           </button>
         ))}
       </div>
+
+      {/* Learning Tooltip */}
+      <LearningTooltip
+        visible={learningMode}
+        title={TIMELINE_HELP.title}
+        description={TIMELINE_HELP.description}
+        position="top"
+      />
 
       {/* Status Indicator */}
       <div style={statusDot(isRunning, isPaused)}>

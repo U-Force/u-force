@@ -7,28 +7,37 @@ import {
   RADIUS,
   PRIORITY_COLORS,
 } from "../../../lib/workbench/theme";
+import LearningTooltip from "../shared/LearningTooltip";
+import { ALARM_HELP } from "../../../lib/workbench/learning-content";
 import type { Alarm } from "../WorkbenchContext";
 
 interface AlarmListProps {
   alarms: Alarm[];
   onAcknowledge: (id: string) => void;
+  learningMode?: boolean;
 }
 
-export default function AlarmList({ alarms, onAcknowledge }: AlarmListProps) {
+export default function AlarmList({ alarms, onAcknowledge, learningMode = false }: AlarmListProps) {
   if (alarms.length === 0) {
     return (
       <div style={emptyStyle}>
         <span style={{ color: COLORS.emerald, fontSize: FONT_SIZES.md }}>
           NO ACTIVE ALARMS
         </span>
+        <div style={{ marginTop: "6px" }}>
+          <LearningTooltip visible={learningMode} title={ALARM_HELP.title} description={ALARM_HELP.description} position="top" />
+        </div>
       </div>
     );
   }
 
   return (
     <div style={container}>
-      <div style={headerStyle}>
-        ALARMS ({alarms.filter((a) => !a.acknowledged).length} ACTIVE)
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={headerStyle}>
+          ALARMS ({alarms.filter((a) => !a.acknowledged).length} ACTIVE)
+        </div>
+        <LearningTooltip visible={learningMode} title={ALARM_HELP.title} description={ALARM_HELP.description} position="left" />
       </div>
       {alarms.map((alarm) => {
         const color = PRIORITY_COLORS[alarm.priority];
