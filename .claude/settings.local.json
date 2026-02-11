@@ -19,7 +19,8 @@
       "Bash(npx vitest run:*)",
       "Bash(npx next build:*)",
       "Bash(git add:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
