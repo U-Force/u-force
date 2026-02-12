@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback } from "react";
 import { useWorkbench } from "./WorkbenchContext";
 import ReactorViewport from "./viewport/ReactorViewport";
 import { usePhysicsToScene } from "./viewport/hooks/usePhysicsToScene";
@@ -15,12 +15,11 @@ import {
   PlantStatusPanel,
   ProcedurePanel,
   ReactivityPanel,
+  SidebarInspector,
   SystemHealthTile,
 } from "./panels";
-import { InspectorCard } from "./overlays";
-import { BoronCard, ControlRodCard, PumpCard } from "./controls";
 import { GlassPanel, LearningTooltip } from "./shared";
-import { COLORS, FONTS, FONT_SIZES, RADIUS, BLUR } from "../../lib/workbench/theme";
+import { COLORS, FONT_SIZES, RADIUS, BLUR } from "../../lib/workbench/theme";
 import { VIEWPORT_HELP, TREE_HELP, MODE_BANNER_HELP } from "../../lib/workbench/learning-content";
 import type { TrainingScenario } from "../../lib/training/types";
 
@@ -32,8 +31,6 @@ export default function WorkbenchLayout() {
     setToolMode,
     setViewMode,
     selectComponent,
-    setInspectorOpen,
-    setControlCardOpen,
     setLeftPanelOpen,
     setLearningMode,
     setActiveScenario,
@@ -122,11 +119,13 @@ export default function WorkbenchLayout() {
                   <LearningTooltip visible={ui.learningMode} title={TREE_HELP.title} description={TREE_HELP.description} position="right" />
                 </div>
               )}
-              <LeftTree
-                selectedNodeId={ui.selectedComponent}
-                onSelectComponent={selectComponent}
-                onSelectScenario={handleSelectScenario}
-              />
+              <div style={ui.selectedComponent ? treeCompact : treeFull}>
+                <LeftTree
+                  selectedNodeId={ui.selectedComponent}
+                  onSelectComponent={selectComponent}
+                  onSelectScenario={handleSelectScenario}
+                />
+              </div>
 
               {/* Level Brief (if scenario selected) */}
               {ui.activeScenario && ui.scenarioState === "briefing" && (
@@ -151,8 +150,28 @@ export default function WorkbenchLayout() {
                   </div>
                 )}
 
+              {/* Sidebar Inspector + Controls */}
+              {ui.selectedComponent && (
+                <SidebarInspector
+                  componentId={ui.selectedComponent}
+                  state={sim.state}
+                  reactivity={sim.reactivity}
+                  rodActual={sim.rodActual}
+                  onClose={() => selectComponent(null)}
+                  rod={sim.rod}
+                  onRodChange={sim.setRod}
+                  tripActive={sim.tripActive}
+                  boronConc={sim.boronConc}
+                  boronActual={sim.boronActual}
+                  onBoronChange={sim.setBoronConc}
+                  pumpOn={sim.pumpOn}
+                  onPumpToggle={() => sim.setPumpOn((v) => !v)}
+                  onScram={sim.handleScram}
+                />
+              )}
+
               {/* System Health */}
-              <div style={healthSection}>
+              <div style={ui.selectedComponent ? healthSectionCompact : healthSection}>
                 <div style={healthHeader}>SYSTEM HEALTH</div>
                 <div style={healthGrid}>
                   <SystemHealthTile name="RCS" status={rcsHealth as "ok" | "degraded"} />
@@ -180,49 +199,6 @@ export default function WorkbenchLayout() {
             <div style={viewportLearningHint}>
               <LearningTooltip visible={ui.learningMode} title={VIEWPORT_HELP.title} description={VIEWPORT_HELP.description} position="bottom" />
             </div>
-          )}
-
-          {/* Inspector Card Overlay */}
-          {ui.inspectorOpen && ui.selectedComponent && (
-            <InspectorCard
-              componentId={ui.selectedComponent}
-              state={sim.state}
-              reactivity={sim.reactivity}
-              rodActual={sim.rodActual}
-              onClose={() => setInspectorOpen(false)}
-              onOpenControl={setControlCardOpen}
-            />
-          )}
-
-          {/* Soft Control Cards */}
-          {ui.controlCardOpen === "rod" && (
-            <ControlRodCard
-              rod={sim.rod}
-              rodActual={sim.rodActual}
-              tripActive={sim.tripActive}
-              onRodChange={sim.setRod}
-              onClose={() => setControlCardOpen(null)}
-              learningMode={ui.learningMode}
-            />
-          )}
-          {ui.controlCardOpen === "boron" && (
-            <BoronCard
-              boronConc={sim.boronConc}
-              boronActual={sim.boronActual}
-              onBoronChange={sim.setBoronConc}
-              onClose={() => setControlCardOpen(null)}
-              learningMode={ui.learningMode}
-            />
-          )}
-          {ui.controlCardOpen === "pump" && (
-            <PumpCard
-              pumpOn={sim.pumpOn}
-              tripActive={sim.tripActive}
-              onPumpToggle={() => sim.setPumpOn((v) => !v)}
-              onScram={sim.handleScram}
-              onClose={() => setControlCardOpen(null)}
-              learningMode={ui.learningMode}
-            />
           )}
 
           {/* Debrief Overlay */}
@@ -377,10 +353,28 @@ const debriefOverlay: React.CSSProperties = {
   zIndex: 70,
 };
 
+const treeFull: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflow: "hidden",
+};
+
+const treeCompact: React.CSSProperties = {
+  flex: "0 0 auto",
+  maxHeight: "35%",
+  overflow: "hidden",
+};
+
 const healthSection: React.CSSProperties = {
   marginTop: "auto",
   padding: "8px",
   borderTop: `1px solid ${COLORS.borderSubtle}`,
+};
+
+const healthSectionCompact: React.CSSProperties = {
+  padding: "8px",
+  borderTop: `1px solid ${COLORS.borderSubtle}`,
+  flexShrink: 0,
 };
 
 const healthHeader: React.CSSProperties = {

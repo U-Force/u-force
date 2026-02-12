@@ -8,6 +8,7 @@ export { default as ModeBanner } from "./ModeBanner";
 export { default as PlantStatusPanel } from "./PlantStatusPanel";
 export { default as ProcedurePanel } from "./ProcedurePanel";
 export { default as ReactivityPanel } from "./ReactivityPanel";
+export { default as SidebarInspector } from "./SidebarInspector";
 export { default as SparklineTrend } from "./SparklineTrend";
 export { default as SystemHealthTile } from "./SystemHealthTile";
 export { default as TreeNode } from "./TreeNode";
