@@ -1,0 +1,454 @@
+================================================================================
+  U-FORCE SLIDE DECK CONTENT
+  Nuclear Reactor Digital Twin — Presentation Material
+================================================================================
+
+
+================================================================================
+  SLIDE: KEY EQUATIONS
+================================================================================
+
+Use these as clean LaTeX renders or stylized text on slides.
+Pick 2-3 per slide MAX. Label each one in plain English.
+
+
+--- 1. NEUTRON POPULATION (Point Kinetics) ---
+
+  dP         rho - beta                 6
+  -- = ( ------------- ) * P   +   SUM( lambda_i * C_i )
+  dt          Lambda                   i=1
+
+  Where:
+    P       = reactor power (normalized, 1.0 = 100%)
+    rho     = total reactivity
+    beta    = delayed neutron fraction (0.0065)
+    Lambda  = prompt neutron generation time (1 ms)
+    C_i     = delayed neutron precursor concentration (6 groups)
+    lambda_i = precursor decay constant
+
+  One-liner for slide: "How fast the neutron population grows or shrinks"
+
+
+--- 2. DELAYED NEUTRON PRECURSORS (6 groups) ---
+
+  dC_i       beta_i
+  ---- = ( --------- ) * P  -  lambda_i * C_i
+   dt        Lambda
+
+  One-liner: "The 'delayed brakes' that keep the reactor controllable"
+
+  Six groups from Keepin et al. (U-235):
+    Group 1: Br-87 family,  beta = 0.000215,  half-life ~56s
+    Group 2: I-137 family,  beta = 0.001424,  half-life ~23s
+    Group 3: Br-89 family,  beta = 0.001274,  half-life ~6.2s
+    Group 4: I-139 family,  beta = 0.002568,  half-life ~2.3s
+    Group 5:                beta = 0.000748,  half-life ~0.6s
+    Group 6:                beta = 0.000273,  half-life ~0.23s
+
+
+--- 3. FUEL TEMPERATURE (Energy Balance) ---
+
+  dTf     P * P_nom  -  h_fc * (Tf - Tc)
+  --- = -----------------------------------
+  dt              m_fuel * c_fuel
+
+  Where:
+    Tf      = fuel temperature (K)
+    Tc      = coolant temperature (K)
+    P_nom   = 3000 MWth (nominal thermal power)
+    h_fc    = fuel-to-coolant heat transfer (25 MW/K)
+    m_fuel  = 35 tonnes UO2
+    c_fuel  = 300 J/(kg*K)
+
+  One-liner: "Heat generated in fuel vs. heat removed by coolant"
+
+
+--- 4. COOLANT TEMPERATURE ---
+
+  dTc     h_fc * (Tf - Tc)  -  h_sink * (Tc - Tc_inlet)
+  --- = --------------------------------------------------
+  dt                  m_coolant * c_coolant
+
+  Where:
+    h_sink(pump ON)  = 60 MW/K  (forced circulation)
+    h_sink(pump OFF) = 10 MW/K  (natural circulation only)
+    m_coolant = 18 tonnes
+    c_coolant = 5500 J/(kg*K) (pressurized water at 155 bar)
+
+  One-liner: "Coolant heats up from fuel, cools down through steam generators"
+
+
+--- 5. TOTAL REACTIVITY (5 Feedback Components) ---
+
+  rho_total = rho_rods + rho_Doppler + rho_moderator + rho_xenon + rho_boron
+
+  Where:
+    rho_rods     = rod_worth_max * sin^2_integral(position) + rho_scram
+    rho_Doppler  = alpha_f * (Tf - Tf_ref)         [alpha_f = -4 pcm/K]
+    rho_moderator= alpha_c * (Tc - Tc_ref)         [alpha_c = -25 pcm/K]
+    rho_xenon    = Xe_concentration * coefficient   [equilibrium: -2800 pcm]
+    rho_boron    = alpha_B * C_boron                [alpha_B = -10 pcm/ppm]
+
+  One-liner: "Five competing forces fighting over whether power goes up or down"
+
+
+--- 6. XENON-135 POISONING (Coupled ODEs) ---
+
+  dI135
+  ----- = gamma_I * Sigma_f * flux  -  lambda_I * I135
+   dt     |___ production from fission    |___ radioactive decay
+
+  dXe135
+  ------ = gamma_Xe * Sigma_f * flux  +  lambda_I * I135
+    dt     |___ direct from fission       |___ from I-135 decay
+
+                -  lambda_Xe * Xe135  -  sigma_Xe * flux * Xe135
+                   |___ decay            |___ neutron burnout
+
+  Key numbers:
+    sigma_Xe  = 2.6 MILLION barns (enormous cross-section)
+    I-135 half-life  = 6.57 hours
+    Xe-135 half-life = 9.14 hours
+    Equilibrium worth = -2800 pcm at full power
+    Time acceleration = 500x (hours compressed to minutes)
+
+  One-liner: "The invisible poison that builds up and fights the reactor"
+
+
+--- 7. DECAY HEAT (3-Group Model) ---
+
+  dD_i
+  ---- = f_i * lambda_i * P  -  lambda_i * D_i
+   dt
+
+  Three groups (total 6.6% of operating power):
+    Short-lived:  3.0% of power,  tau = 10s
+    Medium-lived: 2.0% of power,  tau = 100s
+    Long-lived:   1.6% of power,  tau = 2000s
+
+  One-liner: "Why you can't just turn off a reactor — heat lingers"
+
+
+--- 8. SCRAM (Emergency Shutdown) ---
+
+  rho_scram(t) = rho_max * (1 - e^(-t / tau))
+
+  Where:
+    rho_max = -8000 pcm (massive negative reactivity)
+    tau     = 1.0 second (insertion time constant)
+
+  One-liner: "Rods slam in, reactor shuts down in ~1 second"
+
+
+--- 9. CONTROL ROD WORTH CURVE ---
+
+  Worth(x) = x - sin(2*pi*x) / (2*pi)
+
+  This gives an S-curve: flat at top/bottom, steep in the middle.
+  Integral of sin^2(pi*x) — models differential worth peaking
+  at mid-core, where neutron flux is highest.
+
+  Total rod worth: 3000 pcm
+
+  One-liner: "Rods are worth more in the middle of the core"
+
+
+--- 10. RK4 INTEGRATION (the ODE solver) ---
+
+  k1 = f(t, y)
+  k2 = f(t + dt/2, y + dt*k1/2)
+  k3 = f(t + dt/2, y + dt*k2/2)
+  k4 = f(t + dt, y + dt*k3)
+
+  y_new = y + (dt/6) * (k1 + 2*k2 + 2*k3 + k4)
+
+  Timestep: 10ms (100 Hz) via requestAnimationFrame
+
+  One-liner: "4th-order accuracy — the gold standard for solving stiff ODEs"
+
+
+================================================================================
+  SLIDE: ARCHITECTURE AT A GLANCE
+================================================================================
+
+Copy this as-is for a text-based diagram, or redraw it visually.
+
+
+                         U-FORCE DIGITAL TWIN ARCHITECTURE
+  ============================================================================
+
+                            +------------------+
+                            |    OPERATOR UI    |
+                            |  (React + Three)  |
+                            +--------+---------+
+                                     |
+                     Control Actions |  Rod position, Pump on/off,
+                     (rate-limited)  |  Boron ppm, SCRAM, Speed
+                                     v
+  +----------------------------------------------------------------------+
+  |                    SIMULATION ENGINE (React Hook)                     |
+  |                                                                      |
+  |   requestAnimationFrame loop @ 100 Hz (10ms timestep)                |
+  |                                                                      |
+  |   +------------------+    +-------------------+    +--------------+  |
+  |   | Rate Limiter     |    | Trip Logic        |    | History      |  |
+  |   | Rod: 5%/s max    |--->| Power >110%       |--->| Buffer       |  |
+  |   | Boron: 10 ppm/s  |    | Fuel >1800K       |    | 500 points   |  |
+  |   +------------------+    | Coolant >620K     |    | (5 sec)      |  |
+  |                           +-------------------+    +--------------+  |
+  +-------------------------------+--------------------------------------+
+                                  |
+                                  v
+  +----------------------------------------------------------------------+
+  |                       PHYSICS KERNEL (model.ts)                      |
+  |                                                                      |
+  |   +------------------+    +---------------------+                    |
+  |   | Reactivity Calc  |    | ODE Integration     |                    |
+  |   |                  |    |                     |                    |
+  |   | rho_rods         |    |  RK4 solver         |                    |
+  |   | + rho_Doppler    |--->|  (4 evaluations     |                    |
+  |   | + rho_moderator  |    |   per timestep)     |                    |
+  |   | + rho_xenon      |    |                     |                    |
+  |   | + rho_boron      |    |  Integrates:        |                    |
+  |   | = rho_total      |    |  - Power (P)        |                    |
+  |   +------------------+    |  - 6 Precursors     |                    |
+  |                           |  - Fuel Temp        |                    |
+  |                           |  - Coolant Temp     |                    |
+  |                           |  - I-135 / Xe-135   |                    |
+  |                           |  - 3 Decay Heat grp |                    |
+  |                           +---------------------+                    |
+  |                                                                      |
+  |   +------------------+    +---------------------+                    |
+  |   | Safety Guards    |    | Parameters          |                    |
+  |   | State clamping   |    | (params.ts)         |                    |
+  |   | Input validation |    | 558 lines of        |                    |
+  |   | Bounds checking  |    | physically-grounded |                    |
+  |   +------------------+    | constants           |                    |
+  |                           +---------------------+                    |
+  +-------------------------------+--------------------------------------+
+                                  |
+                                  v
+  +----------------------------------------------------------------------+
+  |                         OUTPUT LAYER                                 |
+  |                                                                      |
+  |   +------------------+  +------------------+  +------------------+   |
+  |   | 3D Viewport      |  | Dashboard Panels |  | Alarm Engine     |   |
+  |   | Three.js PWR     |  | Power display    |  | Deadband logic   |   |
+  |   | - Reactor vessel |  | Temp gauges      |  | Priority sorting |   |
+  |   | - Control rods   |  | Rod slider       |  | Critical/High/   |   |
+  |   | - Primary loop   |  | Reactivity chart |  |   Medium/Low     |   |
+  |   | - Steam gen      |  | Power history    |  |                  |   |
+  |   | - Turbine island |  | Boron control    |  |                  |   |
+  |   | - Containment    |  | Speed control    |  |                  |   |
+  |   +------------------+  +------------------+  +------------------+   |
+  +----------------------------------------------------------------------+
+                                  |
+                                  v
+  +----------------------------------------------------------------------+
+  |                      TRAINING SYSTEM                                 |
+  |                                                                      |
+  |   13 Scenarios          3-Tier Curriculum       Metrics & Scoring    |
+  |   - Cold startup        - Foundations            - Action recording  |
+  |   - Power ascension     - Systems & Operations   - Deviation track  |
+  |   - Xenon dynamics      - Protection & Emergency - Safety violations|
+  |   - Pump trip           5 Operator Roles         - Auto-scoring     |
+  |   - LOCA               - Trainee -> Free Play   - Debrief & report |
+  +----------------------------------------------------------------------+
+
+
+  DATA FLOW SUMMARY (one line):
+
+  Controls --> Rate Limiter --> Reactivity Calc --> RK4 Solver --> New State
+       --> Safety Clamp --> Trip Check --> UI Update --> 3D + Panels + Alarms
+
+
+================================================================================
+  SLIDE: WHAT MAKES IT REAL (EXPANDED)
+================================================================================
+
+There's much more than 5 bullet points. Here's the full list, organized
+by category. Pick 8-10 that hit hardest for your audience.
+
+
+--- NEUTRONICS (how the nuclear chain reaction is modeled) ---
+
+  * 6-group delayed neutrons from Keepin et al. U-235 data
+    - Not a simplified 1-group — uses the actual 6 precursor families
+    - Each with distinct half-lives (0.23s to 56s) and yield fractions
+    - This is what makes reactor control possible (without delayed
+      neutrons, control would require microsecond response times)
+
+  * Point kinetics with prompt + delayed terms
+    - The same equations used in NRC-licensed reactor analysis codes
+    - Separates prompt response (microseconds) from delayed (seconds)
+
+  * Total delayed neutron fraction beta = 0.0065
+    - THE critical safety parameter — one dollar of reactivity
+
+
+--- THERMAL-HYDRAULICS (heat generation and removal) ---
+
+  * Coupled fuel + coolant energy balance
+    - Fuel heats up from fission, transfers heat to coolant
+    - Coolant removes heat through steam generators
+    - Two-node lumped parameter: fuel and coolant each have mass,
+      specific heat, and heat transfer coefficients
+
+  * Realistic thermal masses and heat transfer
+    - 35 tonnes of UO2 fuel (c_p = 300 J/kg/K)
+    - 18 tonnes of pressurized water (c_p = 5500 J/kg/K at 155 bar)
+    - Fuel-coolant transfer: 25 MW/K
+    - Steam generator removal: 60 MW/K (forced) / 10 MW/K (natural circ)
+
+  * Pump trip physics
+    - Losing the pump drops heat removal from 60 to 10 MW/K
+    - Coolant temperature rises realistically on natural circulation
+    - This is a real operational concern in PWRs
+
+
+--- REACTIVITY FEEDBACK (inherent safety mechanisms) ---
+
+  * Doppler broadening (fuel temperature feedback)
+    - alpha_f = -4 pcm/K — fuel heats up, reactivity drops
+    - This is the PRIMARY inherent safety mechanism in every reactor
+    - Acts within milliseconds (fastest feedback)
+
+  * Moderator temperature coefficient
+    - alpha_c = -25 pcm/K — hot water absorbs fewer neutrons poorly,
+      but in a PWR it moderates less, so reactivity drops
+    - Stronger than Doppler but slower (coolant thermal inertia)
+
+  * Both coefficients are NEGATIVE
+    - This means the reactor is inherently self-stabilizing
+    - Power up → temperatures up → reactivity down → power stabilizes
+    - This is not an approximation — it's how real PWRs work
+
+
+--- XENON-135 POISONING (the operator's nemesis) ---
+
+  * Full coupled I-135 / Xe-135 dynamics
+    - Not a lookup table — solves the actual differential equations
+    - I-135 (6.57h half-life) decays into Xe-135 (9.14h half-life)
+    - Xe-135 has a 2.6 MILLION barn absorption cross-section
+      (largest of any known nuclide)
+
+  * Equilibrium xenon worth: -2800 pcm at full power
+    - That's 4.3 dollars of negative reactivity from a single isotope
+    - After shutdown, xenon PEAKS before decaying (the "xenon pit")
+    - This is why real reactors can't restart immediately after shutdown
+
+  * 500x time acceleration preserving correct equilibrium
+    - Real xenon dynamics take 10-40 hours
+    - We speed up rates but keep the steady-state math identical
+    - Students see hours of physics in minutes
+
+
+--- CONTROL SYSTEMS (what operators actually manipulate) ---
+
+  * Non-linear control rod worth (sine-squared S-curve)
+    - Rods are worth more in the middle of the core
+    - Matches real differential worth curves from HRTD training
+    - Total worth: 3000 pcm
+
+  * Soluble boron chemical shim
+    - Boric acid dissolved in coolant: -10 pcm/ppm
+    - Range: 0-2500 ppm (real PWR operating range)
+    - Rate-limited to 10 ppm/s (realistic dilution/boration rates)
+
+  * Scram: exponential reactivity insertion
+    - -8000 pcm driven by gravity + springs
+    - Time constant: 1 second (realistic rod drop time)
+    - 300 pcm shutdown margin below critical
+
+
+--- DECAY HEAT (why Fukushima happened) ---
+
+  * 3-group fission product decay model
+    - Short (10s), medium (100s), long (2000s) time constants
+    - Total: 6.6% of operating power persists after shutdown
+    - This is why cooling must continue even after the chain reaction stops
+
+  * 5x time acceleration for educational visibility
+    - Students can see decay heat decline in real-time
+
+
+--- PROTECTION SYSTEM (automatic safety trips) ---
+
+  * Three automatic trip setpoints:
+    - Power > 110% nominal → automatic SCRAM
+    - Fuel temperature > 1800K → automatic SCRAM
+    - Coolant temperature > 620K → automatic SCRAM
+
+  * Alarm engine with deadband hysteresis
+    - Prevents alarm chattering near threshold
+    - Priority-sorted: Critical > High > Medium > Low
+    - Alarm lifecycle: activate → acknowledge → clear
+
+
+--- NUMERICAL METHODS (why the physics actually works) ---
+
+  * 4th-order Runge-Kutta integration
+    - 4 derivative evaluations per timestep
+    - Handles stiff kinetics equations (prompt jump)
+    - 10ms timestep at 100 Hz via requestAnimationFrame
+
+  * Full state validation and safety clamping
+    - Every input validated (finite, in-range, physically sensible)
+    - State clamped to physical bounds every step
+    - Prevents numerical blowup from ever reaching the UI
+
+  * Rate-limited controls
+    - Rod movement: max 5%/second
+    - Boron changes: max 10 ppm/second
+    - Prevents unphysical instantaneous jumps
+
+
+--- WHAT WE DELIBERATELY SIMPLIFIED (good slide for Q&A) ---
+
+  * Point kinetics, not spatial (no flux shape)
+  * Lumped parameter thermal (2-node, not finite element)
+  * Prompt generation time slowed 10x for human interaction
+  * No fuel burnup or depletion
+  * Simplified pressure model
+  * These are standard educational simplifications used in
+    NRC HRTD training simulators
+
+
+================================================================================
+  SLIDE: TECH STACK (one clean slide)
+================================================================================
+
+  Physics Engine:    909 lines TypeScript (model.ts)
+                     558 lines parameters (params.ts)
+                     414 lines validation (guards.ts)
+
+  Simulation Loop:   React Hook, requestAnimationFrame, 100 Hz
+
+  3D Visualization:  Three.js + React Three Fiber
+                     10 geometry components (vessel, rods, loops, etc.)
+
+  Frontend:          Next.js 16, React 19, Tailwind CSS 4
+
+  Training:          13 scenarios, 3-tier HRTD curriculum, 5 operator roles
+                     Automated metrics collection + scoring + debrief
+
+  Total:             ~5,000+ lines of physics + simulation code
+                     Running entirely in the browser — no server needed
+
+
+================================================================================
+  SUGGESTED SLIDE ORDER
+================================================================================
+
+  1.  Hook:          "We built a nuclear reactor that runs in your browser"
+  2.  Architecture:  The diagram above (simplified version)
+  3.  Equations #1:  Point kinetics + precursors (slides 1-2 above)
+  4.  Equations #2:  Thermal model + reactivity feedback (slides 3-5)
+  5.  Equations #3:  Xenon poisoning (slide 6) — this one gets gasps
+  6.  What's Real:   Pick your best 8-10 bullets from the list above
+  7.  Screenshot:    3D viewport with containment off
+  8.  Screenshot:    Full workbench dashboard (all panels live)
+  9.  Demo/GIF:      Rod withdrawal → power rise → Doppler stabilization
+  10. Training:      13 scenarios, roles, scoring, debrief
+  11. Tech stack:    The one-slide summary above
+  12. Q&A:           "What we simplified" list ready in your back pocket
