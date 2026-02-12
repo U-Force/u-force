@@ -96,14 +96,16 @@ export default function ScenarioDebrief({
     rightItems.push('Coolant temperature well controlled');
   }
 
-  // Score breakdown
-  const objectiveScore = scenario.objectives.length > 0
-    ? Math.round((completedObjectives.length / scenario.objectives.length) * 100)
-    : 100;
-  const tripPenalty = metrics.tripCount * 20;
-  const violationPenalty = metrics.safetyLimitViolations.length * 15;
-  const skippedPenalty = metrics.procedureStepsSkipped * 5;
-  const totalPenalty = tripPenalty + violationPenalty + skippedPenalty;
+  // Score breakdown matching the scoring model in metrics.ts
+  const totalObjectives = scenario.objectives.length;
+  const objectivePoints = totalObjectives > 0
+    ? Math.round((completedObjectives.length / totalObjectives) * 70)
+    : 70;
+  let safetyPoints = 20;
+  safetyPoints -= metrics.tripCount * 10;
+  safetyPoints -= metrics.safetyLimitViolations.length * 7;
+  safetyPoints = Math.max(0, safetyPoints);
+  const procedurePenalty = metrics.procedureStepsSkipped * 3;
 
   // SVG score ring calculations
   const ringRadius = 58;
@@ -278,36 +280,43 @@ export default function ScenarioDebrief({
               <div style={sectionTitle}>SCORE BREAKDOWN</div>
               <div style={breakdownCard}>
                 <div style={breakdownRow}>
-                  <span style={breakdownLabel}>Objective Completion</span>
-                  <span style={breakdownVal(objectiveScore >= 100 ? COLORS.emerald : COLORS.amber)}>
-                    {objectiveScore}%
+                  <span style={breakdownLabel}>Objectives ({completedObjectives.length}/{totalObjectives})</span>
+                  <span style={breakdownVal(objectivePoints >= 70 ? COLORS.emerald : COLORS.amber)}>
+                    {objectivePoints}/70
                   </span>
                 </div>
                 <div style={breakdownBarOuter}>
-                  <div style={breakdownBarFill(objectiveScore, COLORS.emerald)} />
+                  <div style={breakdownBarFill((objectivePoints / 70) * 100, COLORS.emerald)} />
                 </div>
 
-                {tripPenalty > 0 && (
-                  <div style={breakdownPenalty}>
-                    <span>Trip Penalty ({metrics.tripCount} x -20)</span>
-                    <span style={breakdownPenaltyVal}>-{tripPenalty}</span>
-                  </div>
+                <div style={breakdownRow}>
+                  <span style={breakdownLabel}>Safety Record</span>
+                  <span style={breakdownVal(safetyPoints >= 20 ? COLORS.emerald : COLORS.amber)}>
+                    {safetyPoints}/20
+                  </span>
+                </div>
+                <div style={breakdownBarOuter}>
+                  <div style={breakdownBarFill((safetyPoints / 20) * 100, safetyPoints >= 20 ? COLORS.emerald : COLORS.amber)} />
+                </div>
+
+                <div style={breakdownRow}>
+                  <span style={breakdownLabel}>Technique</span>
+                  <span style={breakdownVal(COLORS.slateLight)}>
+                    +{Math.round(metrics.score - objectivePoints - safetyPoints + procedurePenalty)}/10
+                  </span>
+                </div>
+
+                {procedurePenalty > 0 && (
+                  <>
+                    <div style={breakdownDivider} />
+                    <div style={breakdownPenalty}>
+                      <span>Skipped Steps ({metrics.procedureStepsSkipped} x -3)</span>
+                      <span style={breakdownPenaltyVal}>-{procedurePenalty}</span>
+                    </div>
+                  </>
                 )}
-                {violationPenalty > 0 && (
-                  <div style={breakdownPenalty}>
-                    <span>Violation Penalty ({metrics.safetyLimitViolations.length} x -15)</span>
-                    <span style={breakdownPenaltyVal}>-{violationPenalty}</span>
-                  </div>
-                )}
-                {skippedPenalty > 0 && (
-                  <div style={breakdownPenalty}>
-                    <span>Skipped Steps ({metrics.procedureStepsSkipped} x -5)</span>
-                    <span style={breakdownPenaltyVal}>-{skippedPenalty}</span>
-                  </div>
-                )}
-                {totalPenalty > 0 && (
-                  <div style={breakdownDivider} />
-                )}
+
+                <div style={breakdownDivider} />
                 <div style={breakdownRow}>
                   <span style={{ ...breakdownLabel, color: COLORS.white, fontWeight: 700 }}>Final Score</span>
                   <span style={breakdownVal(scoreColor)}>

@@ -298,51 +298,82 @@ export class MetricsCollector {
 
   /**
    * Calculate overall performance score (0-100)
+   *
+   * Scoring breakdown:
+   *   - Objective completion: up to 70 points (primary driver)
+   *   - Safety record:       up to 20 points (no trips/violations)
+   *   - Criteria quality:    up to 10 points (refinement bonus)
+   *   - Penalties deducted from total
    */
   private calculateScore(scenario: TrainingScenario): number {
-    let totalScore = 0;
-    let totalWeight = 0;
+    // 1. Objective completion — 70 points
+    const totalObjectives = scenario.objectives.length;
+    const completedCount = this.metrics.objectivesCompleted.length;
+    const objectivePoints = totalObjectives > 0
+      ? (completedCount / totalObjectives) * 70
+      : 70;
 
+    // 2. Safety record — 20 points (lose points for trips/violations)
+    let safetyPoints = 20;
+    safetyPoints -= this.metrics.tripCount * 10;
+    safetyPoints -= this.metrics.safetyLimitViolations.length * 7;
+    safetyPoints = Math.max(0, safetyPoints);
+
+    // 3. Criteria quality bonus — 10 points
+    let criteriaScore = 0;
+    let criteriaWeight = 0;
     for (const objective of scenario.objectives) {
       for (const criterion of objective.assessmentCriteria) {
-        const criterionScore = this.evaluateCriterion(criterion);
-        totalScore += criterionScore * criterion.weight;
-        totalWeight += criterion.weight;
+        const score = this.evaluateCriterion(criterion);
+        criteriaScore += score * criterion.weight;
+        criteriaWeight += criterion.weight;
       }
     }
+    const criteriaPoints = criteriaWeight > 0
+      ? (criteriaScore / criteriaWeight) * 10
+      : 10;
 
-    // Normalize to 0-100
-    const normalizedScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0;
+    // 4. Procedure penalties
+    const procedurePenalty = this.metrics.procedureStepsSkipped * 3;
 
-    // Apply penalties
-    let penaltyScore = normalizedScore;
-    penaltyScore -= this.metrics.tripCount * 20; // -20 per trip
-    penaltyScore -= this.metrics.safetyLimitViolations.length * 15; // -15 per violation
-    penaltyScore -= this.metrics.procedureStepsSkipped * 5; // -5 per skipped step
-
-    return Math.max(0, Math.min(100, penaltyScore));
+    const total = objectivePoints + safetyPoints + criteriaPoints - procedurePenalty;
+    return Math.max(0, Math.min(100, Math.round(total)));
   }
 
   /**
-   * Evaluate a single assessment criterion
+   * Evaluate a single assessment criterion with graduated scoring.
+   * Returns 0-1 where 1 is perfect and partial credit is given for near-misses.
    */
   private evaluateCriterion(criterion: AssessmentCriterion): number {
     const value = this.getMetricValue(criterion.metric);
     const target = criterion.target;
 
-    // Parse target (e.g., "<600", "18-22", "0")
     if (target.startsWith('<')) {
       const threshold = parseFloat(target.substring(1));
-      return value < threshold ? 1 : 0;
+      if (value < threshold) return 1;
+      // Graduated: lose points proportionally up to 2x the threshold
+      const overshoot = (value - threshold) / threshold;
+      return Math.max(0, 1 - overshoot);
     } else if (target.startsWith('>')) {
       const threshold = parseFloat(target.substring(1));
-      return value > threshold ? 1 : 0;
+      if (value > threshold) return 1;
+      if (threshold === 0) return value > 0 ? 1 : 0;
+      const undershoot = (threshold - value) / threshold;
+      return Math.max(0, 1 - undershoot);
     } else if (target.includes('-')) {
       const [min, max] = target.split('-').map(parseFloat);
-      return value >= min && value <= max ? 1 : 0;
+      if (value >= min && value <= max) return 1;
+      const range = max - min;
+      const margin = range > 0 ? range : 1;
+      if (value < min) return Math.max(0, 1 - (min - value) / margin);
+      return Math.max(0, 1 - (value - max) / margin);
     } else {
       const exact = parseFloat(target);
-      return value === exact ? 1 : 0;
+      if (value === exact) return 1;
+      // For exact match targets (like tripsOccurred = 0), penalize per unit
+      if (exact === 0) return Math.max(0, 1 - value * 0.5);
+      const deviation = Math.abs(value - exact) / Math.max(Math.abs(exact), 1);
+      return Math.max(0, 1 - deviation);
     }
   }
 
@@ -374,12 +405,15 @@ export class MetricsCollector {
       case 'maxPowerRate':
         return this.maxPowerRate;
       case 'rodWithdrawalRate':
-        // Calculate average withdrawal rate
-        const withdrawals = this.metrics.rodMovements.filter(m => m.action === 'withdraw');
-        if (withdrawals.length === 0) return 0;
-        const totalWithdrawal = withdrawals.reduce((sum, m) => sum + Math.abs(m.toValue - m.fromValue), 0);
-        const totalTime = this.metrics.duration / 60; // Convert to minutes
-        return totalTime > 0 ? (totalWithdrawal * 100) / totalTime : 0; // %/minute
+        // Calculate net withdrawal rate (first position → last position) over time
+        // This avoids penalizing many small slider adjustments
+        const allMoves = this.metrics.rodMovements;
+        if (allMoves.length === 0) return 0;
+        const firstPos = allMoves[0].fromValue;
+        const lastPos = allMoves[allMoves.length - 1].toValue;
+        const netWithdrawal = Math.max(0, lastPos - firstPos); // Only positive = withdrawal
+        const elapsedMinutes = this.metrics.duration / 60;
+        return elapsedMinutes > 0 ? (netWithdrawal * 100) / elapsedMinutes : 0; // %/minute
       default:
         return 0;
     }

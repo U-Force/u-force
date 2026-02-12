@@ -117,6 +117,7 @@ export function useReactorSimulation(
   const rodRef = useRef(rod);
   const pumpRef = useRef(pumpOn);
   const scramRef = useRef(scram);
+  const tripActiveRef = useRef(tripActive);
   const rodActualRef = useRef(0.0);
   const boronRef = useRef(boronConc);
   const boronActualRef = useRef(0.0);
@@ -130,6 +131,7 @@ export function useReactorSimulation(
   useEffect(() => { onStopRef.current = onStop; }, [onStop]);
 
   // Keep refs in sync with state
+  useEffect(() => { tripActiveRef.current = tripActive; }, [tripActive]);
   useEffect(() => { rodRef.current = rod; }, [rod]);
   useEffect(() => { pumpRef.current = pumpOn; }, [pumpOn]);
   useEffect(() => { scramRef.current = scram; }, [scram]);
@@ -174,6 +176,7 @@ export function useReactorSimulation(
       setPumpOn(true);
       pumpRef.current = true;
       setTripActive(false);
+      tripActiveRef.current = false;
       setTripReason(null);
 
       const totalDecayHeat = reactorState.decayHeat.reduce((sum, d) => sum + d, 0);
@@ -257,10 +260,11 @@ export function useReactorSimulation(
             scram: currentScram,
           });
 
-          if (!tripActive && !currentScram) {
+          if (!tripActiveRef.current && !currentScram) {
             const { trip, reason } = checkTrips(newState);
             if (trip) {
               setTripActive(true);
+              tripActiveRef.current = true;
               setTripReason(reason);
               setScram(true);
               scramRef.current = true;
@@ -282,6 +286,7 @@ export function useReactorSimulation(
       } catch (error) {
         console.error("Simulation error:", error);
         setTripActive(true);
+        tripActiveRef.current = true;
         setTripReason("SIMULATION ERROR");
         setScram(true);
         scramRef.current = true;
@@ -305,7 +310,7 @@ export function useReactorSimulation(
         rod: rodRef.current,
         pumpOn: pumpRef.current,
         scram: scramRef.current,
-        tripActive,
+        tripActive: tripActiveRef.current,
         boronConc: boronActualRef.current,
       }, simDelta);
 
@@ -326,7 +331,7 @@ export function useReactorSimulation(
 
       animationRef.current = requestAnimationFrame(tick);
     },
-    [isPaused, speed, tripActive, checkTrips]
+    [isPaused, speed, checkTrips]
   );
 
   const handleStart = useCallback(() => {
@@ -363,6 +368,7 @@ export function useReactorSimulation(
     rodRef.current = 0;
     rodActualRef.current = 0;
     setTripActive(true);
+    tripActiveRef.current = true;
     setTripReason("MANUAL SCRAM");
   }, []);
 
@@ -370,6 +376,7 @@ export function useReactorSimulation(
     setScram(false);
     scramRef.current = false;
     setTripActive(false);
+    tripActiveRef.current = false;
     setTripReason(null);
   }, []);
 
