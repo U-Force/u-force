@@ -121,8 +121,8 @@ export const PRESSURIZER = {
   position: [-4, 4.5, 5.5] as [number, number, number],
   radius: 0.5,
   height: 3.5,
-  /** Target point the surge line connects to (Loop 2 hot leg) */
-  surgeLineTarget: [-3, 1.5, 3] as [number, number, number],
+  /** Target point the surge line connects to (Loop 2 hot leg) — matches hot leg curve */
+  surgeLineTarget: [-3.04, 2.0, 3.04] as [number, number, number],
 } as const;
 
 // ============================================================================

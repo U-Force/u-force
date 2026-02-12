@@ -45,6 +45,7 @@ export default function PWRScene({
       <ReactorVessel
         onSelect={onSelectComponent}
         selected={selectedComponent === "vessel"}
+        viewMode={viewMode}
       />
 
       {/* Core glow inside vessel */}

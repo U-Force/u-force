@@ -1,20 +1,39 @@
 "use client";
 
-import React from "react";
-import { ThreeEvent } from "@react-three/fiber";
+import React, { useRef } from "react";
+import { ThreeEvent, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import { COLORS } from "../../../../lib/workbench/theme";
 import { useSelectionHighlight } from "../hooks/useSelectionHighlight";
 import { VESSEL, CRDM, NOZZLE, LOOPS } from "../layout";
+import type { ViewMode } from "../../WorkbenchContext";
 
 interface ReactorVesselProps {
   selected?: boolean;
   onSelect?: (id: string) => void;
+  viewMode?: ViewMode;
 }
 
 const CAP_RADIUS = VESSEL.radius;
 
-function ReactorVessel({ selected = false, onSelect }: ReactorVesselProps) {
+function ReactorVessel({ selected = false, onSelect, viewMode = "normal" }: ReactorVesselProps) {
   const bodyMatRef = useSelectionHighlight(selected);
+  const topCapRef = useRef<THREE.MeshStandardMaterial>(null);
+  const bottomCapRef = useRef<THREE.MeshStandardMaterial>(null);
+  const isXray = viewMode === "xray";
+
+  // Animate vessel shell opacity for X-Ray mode
+  useFrame(() => {
+    const targetOpacity = isXray ? 0.12 : 1.0;
+    const refs = [bodyMatRef, topCapRef, bottomCapRef];
+    for (const ref of refs) {
+      if (ref.current) {
+        ref.current.opacity = THREE.MathUtils.lerp(ref.current.opacity, targetOpacity, 0.06);
+        ref.current.transparent = true;
+        ref.current.depthWrite = !isXray;
+      }
+    }
+  });
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -69,6 +88,8 @@ function ReactorVessel({ selected = false, onSelect }: ReactorVesselProps) {
           roughness={0.3}
           emissive={COLORS.highlightEmissive}
           emissiveIntensity={0}
+          transparent
+          opacity={1}
         />
       </mesh>
 
@@ -78,11 +99,14 @@ function ReactorVessel({ selected = false, onSelect }: ReactorVesselProps) {
           args={[CAP_RADIUS, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]}
         />
         <meshStandardMaterial
+          ref={topCapRef}
           color={COLORS.metalDark}
           metalness={0.85}
           roughness={0.3}
           emissive={COLORS.highlightEmissive}
           emissiveIntensity={selected ? 0.3 : 0}
+          transparent
+          opacity={1}
         />
       </mesh>
 
@@ -92,11 +116,14 @@ function ReactorVessel({ selected = false, onSelect }: ReactorVesselProps) {
           args={[CAP_RADIUS, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]}
         />
         <meshStandardMaterial
+          ref={bottomCapRef}
           color={COLORS.metalDark}
           metalness={0.85}
           roughness={0.3}
           emissive={COLORS.highlightEmissive}
           emissiveIntensity={selected ? 0.3 : 0}
+          transparent
+          opacity={1}
         />
       </mesh>
 

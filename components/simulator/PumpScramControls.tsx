@@ -61,14 +61,14 @@ export default function PumpScramControls({
 
 const controlRow: React.CSSProperties = {
   display: "flex",
-  gap: "8px",
+  gap: "6px",
   marginBottom: "16px",
 };
 
 const greenStyles = {
   toggleButton: {
     flex: 1,
-    padding: "14px 16px",
+    padding: "10px 10px",
     borderRadius: "6px",
     border: "1px solid rgba(16, 185, 129, 0.2)",
     background: "rgba(15, 20, 25, 0.4)",
@@ -77,6 +77,7 @@ const greenStyles = {
     alignItems: "center",
     cursor: "pointer",
     transition: "all 0.15s",
+    minWidth: 0,
   } as React.CSSProperties,
   toggleButtonActive: {
     borderColor: "#10b981",
@@ -84,7 +85,7 @@ const greenStyles = {
   } as React.CSSProperties,
   scramButton: {
     flex: 1,
-    padding: "14px 16px",
+    padding: "10px 10px",
     borderRadius: "6px",
     border: "1px solid rgba(16, 185, 129, 0.2)",
     background: "rgba(15, 20, 25, 0.4)",
@@ -94,14 +95,15 @@ const greenStyles = {
     cursor: "pointer",
     transition: "all 0.15s",
     borderColor: "rgba(239, 68, 68, 0.3)",
+    minWidth: 0,
   } as React.CSSProperties,
   scramActive: {
     borderColor: "#ef4444",
     background: "rgba(239, 68, 68, 0.2)",
   } as React.CSSProperties,
   toggleLabel: {
-    fontSize: "10px",
-    letterSpacing: "1.5px",
+    fontSize: "9px",
+    letterSpacing: "1px",
     color: "#6ee7b7",
     fontFamily: "'Inter', sans-serif",
     textTransform: "none",

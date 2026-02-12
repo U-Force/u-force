@@ -15,7 +15,7 @@ interface PressurizerProps {
 
 const PZR_RADIUS = PRESSURIZER.radius;
 const PZR_HEIGHT = PRESSURIZER.height;
-const SURGE_RADIUS = 0.1;
+const SURGE_RADIUS = 0.14;
 const HEATER_COLOR = new THREE.Color("#ff4400");
 
 function Pressurizer({
@@ -46,25 +46,31 @@ function Pressurizer({
   };
 
   // Build curved surge line via CatmullRom → TubeGeometry
+  // Routes from pressurizer bottom down to Loop 2 hot leg
   const surgeGeo = useMemo(() => {
-    const pzrBottom: [number, number, number] = [0, -PZR_HEIGHT / 2 - 0.2, 0];
-    const target = [
+    const pzrBottom = new THREE.Vector3(0, -PZR_HEIGHT / 2 - 0.2, 0);
+    const target = new THREE.Vector3(
       PRESSURIZER.surgeLineTarget[0] - PRESSURIZER.position[0],
       PRESSURIZER.surgeLineTarget[1] - PRESSURIZER.position[1],
       PRESSURIZER.surgeLineTarget[2] - PRESSURIZER.position[2],
-    ];
-    const midY = (pzrBottom[1] + target[1]) / 2;
+    );
+    // Smooth 4-point curve: down from pressurizer, arc toward hot leg, connect
     const curve = new THREE.CatmullRomCurve3(
       [
-        new THREE.Vector3(pzrBottom[0], pzrBottom[1], pzrBottom[2]),
-        new THREE.Vector3(pzrBottom[0] * 0.5 + target[0] * 0.5, midY - 0.5, pzrBottom[2] * 0.5 + target[2] * 0.5),
-        new THREE.Vector3(target[0], target[1], target[2]),
+        pzrBottom,
+        new THREE.Vector3(pzrBottom.x, pzrBottom.y - 0.6, pzrBottom.z),
+        new THREE.Vector3(
+          (pzrBottom.x + target.x) * 0.5,
+          (pzrBottom.y + target.y) * 0.5 - 0.3,
+          (pzrBottom.z + target.z) * 0.5,
+        ),
+        target,
       ],
       false,
       "catmullrom",
       0.5
     );
-    return new THREE.TubeGeometry(curve, 20, SURGE_RADIUS, 8, false);
+    return new THREE.TubeGeometry(curve, 32, SURGE_RADIUS, 10, false);
   }, []);
 
   return (
@@ -124,9 +130,11 @@ function Pressurizer({
       {/* Curved surge line (pressurizer bottom → Loop 2 hot leg) */}
       <mesh geometry={surgeGeo}>
         <meshStandardMaterial
-          color="#505050"
-          metalness={0.85}
-          roughness={0.3}
+          color={COLORS.pipeHot}
+          metalness={0.6}
+          roughness={0.4}
+          emissive={COLORS.pipeHot}
+          emissiveIntensity={0.1}
         />
       </mesh>
 

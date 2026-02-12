@@ -42,8 +42,8 @@ const card: React.CSSProperties = {
   borderRadius: RADIUS.xl,
   backdropFilter: BLUR.xl,
   boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-  minWidth: "280px",
-  maxWidth: "360px",
+  minWidth: "240px",
+  maxWidth: "300px",
 };
 
 const header: React.CSSProperties = {
