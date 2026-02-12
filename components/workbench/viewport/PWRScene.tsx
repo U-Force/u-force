@@ -9,6 +9,7 @@ import Pressurizer from "./geometries/Pressurizer";
 import PrimaryLoop from "./geometries/PrimaryLoop";
 import CoolantPump from "./geometries/CoolantPump";
 import Containment from "./geometries/Containment";
+import PlantCompound from "./geometries/PlantCompound";
 import TurbineIsland from "./geometries/TurbineIsland";
 import SecondaryLoop from "./geometries/SecondaryLoop";
 import HotspotMarker from "../overlays/HotspotMarker";
@@ -38,7 +39,10 @@ export default function PWRScene({
 }: PWRSceneProps) {
   return (
     <group>
-      {/* Containment dome */}
+      {/* Plant compound (buildings, ground, cooling tower, fence) */}
+      <PlantCompound viewMode={viewMode} />
+
+      {/* Containment building */}
       <Containment visible={containmentVisible} viewMode={viewMode} />
 
       {/* Reactor Vessel at origin */}
