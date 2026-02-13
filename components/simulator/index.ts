@@ -8,3 +8,6 @@ export { default as PowerHistoryGraph } from "./PowerHistoryGraph";
 export { default as TemperatureMetrics } from "./TemperatureMetrics";
 export { default as ReactivityPanel } from "./ReactivityPanel";
 export { default as BoronControl } from "./BoronControl";
+export { default as PressurizerControl } from "./PressurizerControl";
+export { default as SteamDumpControl } from "./SteamDumpControl";
+export { default as FeedwaterControl } from "./FeedwaterControl";

@@ -208,6 +208,7 @@ export default function TrainingPage() {
     maxFuelTemp: 0, maxCoolantTemp: 0, currentPower: 0, rodPosition: 0,
     rodWithdrawalRate: 0, timeToFirstCriticality: -1, powerChangeCount: 0,
     observationTime: 0, finalPower: 0, timeAt50Percent: 0, maxPowerRate: 0,
+    maxPressure: 0, minPressure: 20, finalPressure: 15.5,
   });
   const lastRodPositionRef = useRef(0.05);
   const lastRodTimestampRef = useRef(0);
@@ -241,6 +242,7 @@ export default function TrainingPage() {
         const powerChanged = Math.abs(currentPowerPercent - lastPowerRef.current) > 5;
         if (powerChanged) lastPowerRef.current = currentPowerPercent;
 
+        const currentPressure = currentState.Ppzr;
         setLiveMetrics(prev => ({
           timeElapsed: currentState.t,
           tripCount: controls.tripActive ? prev.tripCount + (prev.tripCount === 0 ? 1 : 0) : prev.tripCount,
@@ -257,6 +259,9 @@ export default function TrainingPage() {
           finalPower: currentPowerPercent,
           timeAt50Percent: collector ? collector.getLiveMetricValue('timeAt50Percent') : 0,
           maxPowerRate: collector ? collector.getLiveMetricValue('maxPowerRate') : 0,
+          maxPressure: Math.max(prev.maxPressure, currentPressure),
+          minPressure: Math.min(prev.minPressure, currentPressure),
+          finalPressure: currentPressure,
         }));
       }
     },
@@ -323,6 +328,7 @@ export default function TrainingPage() {
         maxFuelTemp: 0, maxCoolantTemp: 0, currentPower: 0, rodPosition: 0,
         rodWithdrawalRate: 0, timeToFirstCriticality: -1, powerChangeCount: 0,
         observationTime: 0, finalPower: 0, timeAt50Percent: 0, maxPowerRate: 0,
+        maxPressure: 0, minPressure: 20, finalPressure: selectedScenario.initialState.reactorState.Ppzr,
       });
       lastRodPositionRef.current = selectedScenario.initialState.controls.rod;
       lastRodTimestampRef.current = 0;

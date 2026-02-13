@@ -43,6 +43,9 @@ export interface ReactorState {
 
   /** Decay heat power by group [normalized to P_nominal, dimensionless] */
   decayHeat: number[];
+
+  /** Pressurizer pressure [MPa] */
+  Ppzr: number;
 }
 
 /**
@@ -76,6 +79,34 @@ export interface ControlInputs {
    * 0 = no boron, typical range 0-2500 ppm.
    */
   boronConc: number;
+
+  /**
+   * Pressurizer heater demand [0-1].
+   * 0 = heaters off, 1 = full heater power.
+   * Heaters increase RCS pressure.
+   */
+  pressurizerHeater: number;
+
+  /**
+   * Pressurizer spray demand [0-1].
+   * 0 = spray off, 1 = full spray flow.
+   * Spray decreases RCS pressure.
+   */
+  pressurizerSpray: number;
+
+  /**
+   * Steam dump / bypass valve position [0-1].
+   * 0 = closed, 1 = fully open.
+   * Increases secondary-side heat rejection.
+   */
+  steamDump: number;
+
+  /**
+   * Feedwater flow demand [0-1].
+   * 0 = no feedwater, 1 = full feedwater flow.
+   * Controls SG water supply and heat removal.
+   */
+  feedwaterFlow: number;
 }
 
 /**

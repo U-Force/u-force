@@ -32,12 +32,17 @@ export const xenonDynamicsScenario: TrainingScenario = {
       I135: 5e14, // Significant iodine inventory from power history
       Xe135: 3e14, // Equilibrium xenon at ~50% power
       decayHeat: [0.005, 0.003, 0.002],
+      Ppzr: 15.5,
     },
     controls: {
       rod: 0.55,
       pumpOn: true,
       scram: false,
       boronConc: 400,
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     },
     timeAcceleration: 5, // Accelerated — xenon transients take hours in real time
   },

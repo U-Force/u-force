@@ -32,12 +32,17 @@ export const boronControlScenario: TrainingScenario = {
       I135: 0,
       Xe135: 0,
       decayHeat: [0, 0, 0],
+      Ppzr: 15.5,
     },
     controls: {
       rod: 0.25,
       pumpOn: true,
       scram: false,
       boronConc: 800, // Start at 800 ppm — room to dilute and borate
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     },
     timeAcceleration: 2,
   },

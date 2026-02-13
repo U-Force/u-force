@@ -96,23 +96,6 @@ export default function ScenarioBriefing({
               </div>
             </div>
 
-            {/* ── Educational Video ── */}
-            {scenario.videoUrl && (
-              <div style={section}>
-                <div style={sectionTitle}>EDUCATIONAL VIDEO</div>
-                <div style={videoContainer}>
-                  <iframe
-                    style={videoFrame}
-                    src={getEmbedUrl(scenario.videoUrl)}
-                    title={`${scenario.name} - Tutorial Video`}
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
-            )}
-
             {/* ── Mission Briefing ── */}
             <div style={section}>
               <div style={sectionTitle}>MISSION BRIEFING</div>

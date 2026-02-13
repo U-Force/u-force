@@ -32,12 +32,17 @@ export const selfRegulationScenario: TrainingScenario = {
       I135: 0,
       Xe135: 0,
       decayHeat: [0, 0, 0],
+      Ppzr: 15.5,
     },
     controls: {
       rod: 0.30, // Rods partially withdrawn
       pumpOn: true,
       scram: false,
       boronConc: 0,
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     },
     timeAcceleration: 1,
   },

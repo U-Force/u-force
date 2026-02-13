@@ -342,7 +342,7 @@ export const XENON_WORTH_EQUILIBRIUM: number = -0.028; // -2800 pcm
  *
  * Units: [dimensionless multiplier]
  */
-export const XENON_TIME_ACCELERATION: number = 500; // 500x faster for interactive simulation
+export const XENON_TIME_ACCELERATION: number = 80; // 80x faster for interactive simulation
 
 /**
  * Macroscopic fission cross-section (Σ_f).
@@ -479,6 +479,18 @@ export interface ReactorParams {
   boronDefault: number;
   boronMax: number;
 
+  // Pressurizer
+  pzrPressureNominal: number;
+  pzrTempCoeff: number;
+  pzrHeaterRate: number;
+  pzrSprayRate: number;
+  pzrHeatLossRate: number;
+  pzrPressureMax: number;
+  pzrPressureMin: number;
+
+  // Steam dump
+  steamDumpCapacity: number;
+
   // Limits
   dtMin: number;
   dtMaxRk4: number;
@@ -527,6 +539,16 @@ export const DEFAULT_PARAMS: ReactorParams = {
   boronCoeff: BORON_COEFF,
   boronDefault: BORON_DEFAULT,
   boronMax: BORON_MAX,
+
+  pzrPressureNominal: 15.5,
+  pzrTempCoeff: 0.08,
+  pzrHeaterRate: 0.03,
+  pzrSprayRate: 0.06,
+  pzrHeatLossRate: 0.005,
+  pzrPressureMax: 17.2,
+  pzrPressureMin: 8.0,
+
+  steamDumpCapacity: 3.0e7,
 
   gammaI: GAMMA_I,
   gammaXe: GAMMA_XE,

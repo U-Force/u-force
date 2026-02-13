@@ -3,7 +3,7 @@
 import React from "react";
 import { X } from "lucide-react";
 import { INSPECTOR_DATA } from "../../../lib/workbench/inspector-data";
-import { ControlRodSlider, BoronControl, PumpScramControls } from "../../simulator";
+import { ControlRodSlider, BoronControl, PumpScramControls, PressurizerControl, SteamDumpControl, FeedwaterControl } from "../../simulator";
 import { COLORS, FONTS, FONT_SIZES, RADIUS } from "../../../lib/workbench/theme";
 import type { ReactorState, ReactivityComponents } from "../../../lib/reactor/types";
 
@@ -23,6 +23,21 @@ interface SidebarInspectorProps {
   pumpOn: boolean;
   onPumpToggle: () => void;
   onScram: () => void;
+  // Pressurizer
+  pressurizerHeater: number;
+  pressurizerHeaterActual: number;
+  pressurizerSpray: number;
+  pressurizerSprayActual: number;
+  onHeaterChange: (v: number) => void;
+  onSprayChange: (v: number) => void;
+  // Steam dump
+  steamDump: number;
+  steamDumpActual: number;
+  onSteamDumpChange: (v: number) => void;
+  // Feedwater
+  feedwaterFlow: number;
+  feedwaterFlowActual: number;
+  onFeedwaterChange: (v: number) => void;
 }
 
 export default function SidebarInspector({
@@ -40,6 +55,18 @@ export default function SidebarInspector({
   pumpOn,
   onPumpToggle,
   onScram,
+  pressurizerHeater,
+  pressurizerHeaterActual,
+  pressurizerSpray,
+  pressurizerSprayActual,
+  onHeaterChange,
+  onSprayChange,
+  steamDump,
+  steamDumpActual,
+  onSteamDumpChange,
+  feedwaterFlow,
+  feedwaterFlowActual,
+  onFeedwaterChange,
 }: SidebarInspectorProps) {
   const meta = INSPECTOR_DATA[componentId];
   if (!meta) return null;
@@ -49,6 +76,7 @@ export default function SidebarInspector({
     if (key === "rodActual") return rodActual;
     if (key === "rhoTotal") return reactivity?.rhoTotal ?? 0;
     if (key === "rhoExt") return reactivity?.rhoExt ?? 0;
+    if (key === "Ppzr") return state.Ppzr;
     return (state as unknown as Record<string, number>)[key] ?? 0;
   };
 
@@ -94,6 +122,31 @@ export default function SidebarInspector({
               onPumpToggle={onPumpToggle}
               onScram={onScram}
               scramDisabled={false}
+            />
+          )}
+          {meta.controlCard === "pressurizer" && (
+            <PressurizerControl
+              pressure={state?.Ppzr ?? 15.5}
+              heater={pressurizerHeater}
+              heaterActual={pressurizerHeaterActual}
+              spray={pressurizerSpray}
+              sprayActual={pressurizerSprayActual}
+              onHeaterChange={onHeaterChange}
+              onSprayChange={onSprayChange}
+            />
+          )}
+          {meta.controlCard === "steamDump" && (
+            <SteamDumpControl
+              steamDump={steamDump}
+              steamDumpActual={steamDumpActual}
+              onSteamDumpChange={onSteamDumpChange}
+            />
+          )}
+          {meta.controlCard === "feedwater" && (
+            <FeedwaterControl
+              feedwaterFlow={feedwaterFlow}
+              feedwaterFlowActual={feedwaterFlowActual}
+              onFeedwaterChange={onFeedwaterChange}
             />
           )}
         </div>

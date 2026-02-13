@@ -75,6 +75,12 @@ function evaluateCriterion(
     currentValue = metrics.timeElapsed;
   } else if (metric === "rodWithdrawalRate") {
     currentValue = Math.abs(metrics.rodWithdrawalRate);
+  } else if (metric === "maxPressure") {
+    currentValue = metrics.maxPressure;
+  } else if (metric === "minPressure") {
+    currentValue = metrics.minPressure;
+  } else if (metric === "finalPressure") {
+    currentValue = metrics.finalPressure;
   }
 
   // Parse target and evaluate
@@ -329,6 +335,8 @@ function formatValue(value: number, unit: string): string {
     return `${value.toFixed(2)}%/min`;
   } else if (unit === "count") {
     return `${Math.floor(value)}`;
+  } else if (unit === "MPa") {
+    return `${value.toFixed(2)} MPa`;
   }
   return `${value.toFixed(2)} ${unit}`;
 }

@@ -167,6 +167,18 @@ export default function WorkbenchLayout() {
                   pumpOn={sim.pumpOn}
                   onPumpToggle={() => sim.setPumpOn((v) => !v)}
                   onScram={sim.handleScram}
+                  pressurizerHeater={sim.pressurizerHeater}
+                  pressurizerHeaterActual={sim.pressurizerHeaterActual}
+                  pressurizerSpray={sim.pressurizerSpray}
+                  pressurizerSprayActual={sim.pressurizerSprayActual}
+                  onHeaterChange={sim.setPressurizerHeater}
+                  onSprayChange={sim.setPressurizerSpray}
+                  steamDump={sim.steamDump}
+                  steamDumpActual={sim.steamDumpActual}
+                  onSteamDumpChange={sim.setSteamDump}
+                  feedwaterFlow={sim.feedwaterFlow}
+                  feedwaterFlowActual={sim.feedwaterFlowActual}
+                  onFeedwaterChange={sim.setFeedwaterFlow}
                 />
               )}
 
@@ -243,6 +255,7 @@ export default function WorkbenchLayout() {
                 boronActual={sim.boronActual}
                 pumpOn={sim.pumpOn}
                 decayHeatPct={decayHeatPct}
+                pressure={sim.state?.Ppzr ?? 15.5}
                 simTime={simTime}
                 history={sim.history}
                 learningMode={ui.learningMode}

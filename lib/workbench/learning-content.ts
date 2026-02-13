@@ -65,6 +65,11 @@ export const STATUS_HELP: Record<string, LearningEntry> = {
     description:
       "Reactor Coolant Pump state. RCPs provide forced circulation of primary coolant through the core. Losing forced flow degrades heat removal and can lead to a reactor trip.",
   },
+  pressure: {
+    title: "RCS Pressure",
+    description:
+      "Pressurizer pressure in MPa. Normal operating pressure is ~15.5 MPa. Controlled by pressurizer heaters (raise) and spray (lower). High pressure trip at 16.5 MPa; low pressure trip at 12.0 MPa.",
+  },
 };
 
 // ============================================================================
@@ -96,6 +101,21 @@ export const CONTROL_HELP: Record<string, LearningEntry> = {
     title: "RCP & Protection",
     description:
       "Reactor Coolant Pump toggle and SCRAM button. The RCP maintains forced coolant flow. SCRAM (Safety Control Rod Ax Man) is the emergency shutdown \u2014 it inserts all control rods instantly to make the reactor deeply subcritical.",
+  },
+  pressurizer: {
+    title: "Pressurizer (Heaters & Spray)",
+    description:
+      "Controls RCS pressure via electric heaters and cold-leg spray. Heaters boil water to raise the steam bubble pressure. Spray condenses steam to lower pressure. Normal operating pressure is ~15.5 MPa (155 bar). High pressure trip at 16.5 MPa; low pressure trip at 12.0 MPa.",
+  },
+  steamDump: {
+    title: "Steam Dump / Bypass Valves",
+    description:
+      "Bypass valves that route steam directly to the condenser, bypassing the turbine. Used during load rejections and turbine trips to reject excess heat. Opening the dump valves increases secondary-side heat removal, helping to cool the primary system.",
+  },
+  feedwater: {
+    title: "Feedwater Flow Control",
+    description:
+      "Controls the flow of feedwater (cool water) to the steam generators. Feedwater absorbs heat from the primary coolant. Reducing feedwater simulates a loss-of-feedwater event — coolant temperatures will rise. Loss of feedwater is a serious transient requiring rapid power reduction.",
   },
 };
 

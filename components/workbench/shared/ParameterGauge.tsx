@@ -11,6 +11,8 @@ interface ParameterGaugeProps {
   max?: number;
   warningHigh?: number;
   dangerHigh?: number;
+  warningLow?: number;
+  dangerLow?: number;
   format?: (v: number) => string;
 }
 
@@ -22,11 +24,17 @@ export default function ParameterGauge({
   max = 100,
   warningHigh,
   dangerHigh,
+  warningLow,
+  dangerLow,
   format,
 }: ParameterGaugeProps) {
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-  const isDanger = dangerHigh !== undefined && value >= dangerHigh;
-  const isWarning = !isDanger && warningHigh !== undefined && value >= warningHigh;
+  const isDangerHigh = dangerHigh !== undefined && value >= dangerHigh;
+  const isDangerLow = dangerLow !== undefined && value <= dangerLow;
+  const isWarningHigh = !isDangerHigh && warningHigh !== undefined && value >= warningHigh;
+  const isWarningLow = !isDangerLow && warningLow !== undefined && value <= warningLow;
+  const isDanger = isDangerHigh || isDangerLow;
+  const isWarning = isWarningHigh || isWarningLow;
   const color = isDanger ? COLORS.red : isWarning ? COLORS.amber : COLORS.emerald;
   const displayValue = format ? format(value) : value.toFixed(1);
 

@@ -239,22 +239,23 @@ interface StateDerivatives {
   dI135: number;
   dXe135: number;
   dDecayHeat: number[];
+  dPpzr: number;
 }
 
 /**
  * Computes the time derivatives of all state variables.
  * This is the core physics kernel.
- * 
+ *
  * @param state Current state
  * @param rho Total reactivity
- * @param pumpOn Pump status
+ * @param controls Control inputs (pump, feedwater, steam dump, pressurizer)
  * @param params Reactor parameters
  * @returns Derivatives of all state variables
  */
 export function computeDerivatives(
   state: ReactorState,
   rho: number,
-  pumpOn: boolean,
+  controls: { pumpOn: boolean; feedwaterFlow: number; steamDump: number; pressurizerHeater: number; pressurizerSpray: number },
   params: ReactorParams
 ): StateDerivatives {
   const { P, C, Tf, Tc } = state;
@@ -317,11 +318,16 @@ export function computeDerivatives(
   // =========================================================================
   
   // Heat removal to ultimate heat sink: Q_sink = h_cool * (Tc - Tc_in)
-  // h_cool depends on pump status
-  const hCool = pumpOn 
-    ? params.hCoolantSinkPumpOn 
+  // h_cool depends on pump status, feedwater flow, and steam dump valve position
+  const hCoolBase = controls.pumpOn
+    ? params.hCoolantSinkPumpOn
     : params.hCoolantSinkPumpOff;
-  
+
+  // Feedwater modulates base heat removal (20% natural circ minimum + 80% scaled by flow)
+  // Steam dump adds extra heat rejection capacity
+  const hCool = hCoolBase * (0.2 + 0.8 * controls.feedwaterFlow)
+    + controls.steamDump * params.steamDumpCapacity;
+
   const Q_sink = hCool * (Tc - params.TcInlet);
   
   // Coolant thermal inertia
@@ -375,7 +381,19 @@ export function computeDerivatives(
     dDecayHeat.push(dD_real * params.decayHeatTimeAcceleration);
   }
 
-  return { dP, dC, dTf, dTc, dI135, dXe135, dDecayHeat };
+  // =========================================================================
+  // Pressurizer pressure dynamics
+  // dPpzr/dt = tempCoeff * dTc + heater * heaterRate - spray * sprayRate
+  //            - heatLossRate * (Ppzr - nominal)
+  // =========================================================================
+
+  const dPpzr =
+    params.pzrTempCoeff * dTc
+    + controls.pressurizerHeater * params.pzrHeaterRate
+    - controls.pressurizerSpray * params.pzrSprayRate
+    - params.pzrHeatLossRate * (state.Ppzr - params.pzrPressureNominal);
+
+  return { dP, dC, dTf, dTc, dI135, dXe135, dDecayHeat, dPpzr };
 }
 
 // ============================================================================
@@ -399,6 +417,7 @@ function applyDerivatives(
     I135: state.I135 + derivatives.dI135 * dt,
     Xe135: state.Xe135 + derivatives.dXe135 * dt,
     decayHeat: state.decayHeat.map((d, i) => d + derivatives.dDecayHeat[i] * dt),
+    Ppzr: state.Ppzr + derivatives.dPpzr * dt,
   };
 }
 
@@ -418,6 +437,7 @@ function addDerivatives(
     dI135: a.dI135 + b.dI135 * scale,
     dXe135: a.dXe135 + b.dXe135 * scale,
     dDecayHeat: a.dDecayHeat.map((ad, i) => ad + b.dDecayHeat[i] * scale),
+    dPpzr: a.dPpzr + b.dPpzr * scale,
   };
 }
 
@@ -433,8 +453,12 @@ function scaleDerivatives(d: StateDerivatives, scale: number): StateDerivatives 
     dI135: d.dI135 * scale,
     dXe135: d.dXe135 * scale,
     dDecayHeat: d.dDecayHeat.map(dd => dd * scale),
+    dPpzr: d.dPpzr * scale,
   };
 }
+
+/** Control subset needed by the integrators. */
+type IntegratorControls = { pumpOn: boolean; feedwaterFlow: number; steamDump: number; pressurizerHeater: number; pressurizerSpray: number };
 
 /**
  * Euler integration step.
@@ -443,18 +467,18 @@ function scaleDerivatives(d: StateDerivatives, scale: number): StateDerivatives 
 function eulerStep(
   state: ReactorState,
   rho: number,
-  pumpOn: boolean,
+  controls: IntegratorControls,
   dt: number,
   params: ReactorParams
 ): ReactorState {
-  const derivatives = computeDerivatives(state, rho, pumpOn, params);
+  const derivatives = computeDerivatives(state, rho, controls, params);
   return applyDerivatives(state, derivatives, dt);
 }
 
 /**
  * Fourth-order Runge-Kutta integration step.
  * More accurate and stable than Euler for larger timesteps.
- * 
+ *
  * k1 = f(t, y)
  * k2 = f(t + dt/2, y + dt*k1/2)
  * k3 = f(t + dt/2, y + dt*k2/2)
@@ -464,25 +488,25 @@ function eulerStep(
 function rk4Step(
   state: ReactorState,
   rho: number,
-  pumpOn: boolean,
+  controls: IntegratorControls,
   dt: number,
   params: ReactorParams
 ): ReactorState {
   // k1 = f(t, y)
-  const k1 = computeDerivatives(state, rho, pumpOn, params);
-  
+  const k1 = computeDerivatives(state, rho, controls, params);
+
   // k2 = f(t + dt/2, y + dt*k1/2)
   const state2 = applyDerivatives(state, k1, dt / 2);
-  const k2 = computeDerivatives(state2, rho, pumpOn, params);
-  
+  const k2 = computeDerivatives(state2, rho, controls, params);
+
   // k3 = f(t + dt/2, y + dt*k2/2)
   const state3 = applyDerivatives(state, k2, dt / 2);
-  const k3 = computeDerivatives(state3, rho, pumpOn, params);
-  
+  const k3 = computeDerivatives(state3, rho, controls, params);
+
   // k4 = f(t + dt, y + dt*k3)
   const state4 = applyDerivatives(state, k3, dt);
-  const k4 = computeDerivatives(state4, rho, pumpOn, params);
-  
+  const k4 = computeDerivatives(state4, rho, controls, params);
+
   // Combine: y_new = y + (dt/6)*(k1 + 2*k2 + 2*k3 + k4)
   // First compute weighted sum of derivatives
   let combined = scaleDerivatives(k1, 1);
@@ -490,7 +514,7 @@ function rk4Step(
   combined = addDerivatives(combined, k3, 2);
   combined = addDerivatives(combined, k4, 1);
   combined = scaleDerivatives(combined, 1 / 6);
-  
+
   return applyDerivatives(state, combined, dt);
 }
 
@@ -604,13 +628,22 @@ export class ReactorModel {
       this.params
     );
     
+    // Build integrator controls subset
+    const intCtrl: IntegratorControls = {
+      pumpOn: controls.pumpOn,
+      feedwaterFlow: controls.feedwaterFlow,
+      steamDump: controls.steamDump,
+      pressurizerHeater: controls.pressurizerHeater,
+      pressurizerSpray: controls.pressurizerSpray,
+    };
+
     // Integrate
     let newState: ReactorState;
     if (this.config.method === 'euler') {
       newState = eulerStep(
         this.state,
         reactivity.rhoTotal,
-        controls.pumpOn,
+        intCtrl,
         dt,
         this.params
       );
@@ -618,7 +651,7 @@ export class ReactorModel {
       newState = rk4Step(
         this.state,
         reactivity.rhoTotal,
-        controls.pumpOn,
+        intCtrl,
         dt,
         this.params
       );
@@ -792,6 +825,7 @@ export function createSteadyState(
     I135: I_eq,
     Xe135: Xe_eq,
     decayHeat,
+    Ppzr: params.pzrPressureNominal,
   };
 }
 
@@ -905,5 +939,6 @@ export function createColdShutdownState(
     I135: 0, // No iodine at cold shutdown
     Xe135: 0, // No xenon at cold shutdown
     decayHeat: new Array(params.decayHeatFractions.length).fill(0), // No decay heat at cold shutdown
+    Ppzr: params.pzrPressureNominal,
   };
 }

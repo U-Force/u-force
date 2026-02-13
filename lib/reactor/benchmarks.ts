@@ -49,6 +49,10 @@ export function runSteadyHold(
     pumpOn: true,
     scram: false,
     boronConc: 0,
+    pressurizerHeater: 0,
+    pressurizerSpray: 0,
+    steamDump: 0,
+    feedwaterFlow: 1,
   };
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -90,6 +94,10 @@ export function runRodInsertion(
     pumpOn: true,
     scram: false,
     boronConc: 0,
+    pressurizerHeater: 0,
+    pressurizerSpray: 0,
+    steamDump: 0,
+    feedwaterFlow: 1,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -131,6 +139,10 @@ export function runRodWithdrawal(
     pumpOn: true,
     scram: false,
     boronConc: 0,
+    pressurizerHeater: 0,
+    pressurizerSpray: 0,
+    steamDump: 0,
+    feedwaterFlow: 1,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.5);
@@ -171,6 +183,10 @@ export function runScram(
     pumpOn: true,
     scram: t >= scramTime,
     boronConc: 0,
+    pressurizerHeater: 0,
+    pressurizerSpray: 0,
+    steamDump: 0,
+    feedwaterFlow: 1,
   });
   
   const timeSeries = model.run(duration, dt, controls, 0.2);
@@ -210,6 +226,10 @@ export function runPumpTrip(
     pumpOn: t < tripTime,
     scram: false,
     boronConc: 0,
+    pressurizerHeater: 0,
+    pressurizerSpray: 0,
+    steamDump: 0,
+    feedwaterFlow: 1,
   });
   
   const timeSeries = model.run(duration, dt, controls, 1.0);
@@ -261,6 +281,10 @@ export function runRodRamp(
       pumpOn: true,
       scram: false,
       boronConc: 0,
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     };
   };
 
@@ -312,6 +336,10 @@ export function runStartup(
       pumpOn: true,
       scram: false,
       boronConc: 0,
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     };
   };
 

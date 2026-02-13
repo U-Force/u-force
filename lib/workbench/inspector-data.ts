@@ -9,7 +9,7 @@ export interface InspectorMeta {
   description: string;
   parameters: { label: string; key: string; unit: string; format?: (v: number) => string }[];
   /** Which soft control card to open, if any */
-  controlCard?: "rod" | "boron" | "pump";
+  controlCard?: "rod" | "boron" | "pump" | "pressurizer" | "steamDump" | "feedwater";
   educationalNote?: string;
 }
 
@@ -22,8 +22,9 @@ function sgEntry(id: string, num: number): InspectorMeta {
     parameters: [
       { label: "Hot Leg Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
     ],
+    controlCard: "feedwater",
     educationalNote:
-      "Each SG has thousands of thin tubes with ~11,000 m\u00B2 of heat transfer area. Tube degradation is a major maintenance concern.",
+      "Each SG has thousands of thin tubes with ~11,000 m\u00B2 of heat transfer area. Feedwater flow controls the water level and heat removal capacity.",
   };
 }
 
@@ -100,11 +101,12 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
     description:
       "Maintains RCS pressure at ~155 bar using electric heaters (to increase) and spray (to decrease). Contains a steam bubble above liquid water for pressure control.",
     parameters: [
+      { label: "Pressure", key: "Ppzr", unit: "MPa", format: (v) => v.toFixed(2) },
       { label: "Coolant Temp", key: "Tc", unit: "K", format: (v) => v.toFixed(0) },
     ],
-    controlCard: "boron",
+    controlCard: "pressurizer",
     educationalNote:
-      "The pressurizer is the only place in the RCS where boiling is intentional. The CVCS injects/removes borated water through the pressurizer.",
+      "The pressurizer is the only place in the RCS where boiling is intentional. Heaters maintain a steam bubble; spray collapses it to reduce pressure.",
   },
 
   // Secondary side
@@ -154,19 +156,21 @@ export const INSPECTOR_DATA: Record<string, InspectorMeta> = {
     id: "condenser",
     name: "Main Condenser",
     description:
-      "Condenses LP turbine exhaust steam back to liquid water at ~33\u00B0C using circulating water from the cooling tower or ocean. Maintains vacuum to maximize turbine efficiency.",
+      "Condenses LP turbine exhaust steam back to liquid water at ~33\u00B0C using circulating water from the cooling tower or ocean. Steam dump valves bypass turbines to dump steam directly here during transients.",
     parameters: [],
+    controlCard: "steamDump",
     educationalNote:
-      "The condenser is the plant's primary heat sink, rejecting ~2000 MW of waste heat to the environment.",
+      "The condenser is the plant's primary heat sink, rejecting ~2000 MW of waste heat to the environment. Steam dump valves allow rapid heat rejection during load rejections.",
   },
   "feed-pump": {
     id: "feed-pump",
     name: "Main Feedwater Pump",
     description:
-      "Pumps condensate from the condenser hotwell back to the steam generators at high pressure (~7 MPa). Driven by a steam turbine or large electric motor.",
+      "Pumps condensate from the condenser hotwell back to the steam generators at high pressure (~7 MPa). Driven by a steam turbine or large electric motor. Controls feedwater flow to the SGs.",
     parameters: [],
+    controlCard: "feedwater",
     educationalNote:
-      "The feedwater pumps are among the largest auxiliary equipment in the plant, consuming ~30 MW.",
+      "The feedwater pumps are among the largest auxiliary equipment in the plant, consuming ~30 MW. Loss of feedwater is a significant transient requiring rapid power reduction.",
   },
   "condensate-pump": {
     id: "condensate-pump",

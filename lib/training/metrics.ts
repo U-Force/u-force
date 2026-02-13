@@ -22,6 +22,8 @@ export class MetricsCollector {
   private lastPower: number = 0;
   private maxFuelTemp: number = 0;
   private maxCoolantTemp: number = 0;
+  private maxPressure: number = 0;
+  private minPressure: number = Infinity;
   private timeAt50Percent: number = 0; // Accumulated time spent at 45-55% power
   private maxPowerRate: number = 0; // Maximum power change rate in %/min
   private lastPowerRateCheckTime: number = 0;
@@ -76,9 +78,11 @@ export class MetricsCollector {
       this.lastPower = currentPowerPercent;
     }
 
-    // Track max temperatures
+    // Track max temperatures and pressure
     this.maxFuelTemp = Math.max(this.maxFuelTemp, state.Tf);
     this.maxCoolantTemp = Math.max(this.maxCoolantTemp, state.Tc);
+    this.maxPressure = Math.max(this.maxPressure, state.Ppzr);
+    this.minPressure = Math.min(this.minPressure, state.Ppzr);
 
     // Track time at 50% power (45-55% range)
     if (this.lastState) {
@@ -356,7 +360,22 @@ export class MetricsCollector {
     // 4. Procedure penalties
     const procedurePenalty = this.metrics.procedureStepsSkipped * 3;
 
-    const total = objectivePoints + safetyPoints + criteriaPoints - procedurePenalty;
+    let total = objectivePoints + safetyPoints + criteriaPoints - procedurePenalty;
+
+    // Hard failure caps — trips and violations should produce clearly low scores
+    if (this.metrics.tripCount > 0) {
+      // A reactor trip is a serious failure — cap at 30
+      total = Math.min(total, 30 - (this.metrics.tripCount - 1) * 10);
+    }
+    if (this.metrics.safetyLimitViolations.length > 0) {
+      // Safety violations are severe — cap at 25
+      total = Math.min(total, 25 - (this.metrics.safetyLimitViolations.length - 1) * 8);
+    }
+    if (!this.metrics.success) {
+      // Any failure caps at 45 even without trips
+      total = Math.min(total, 45);
+    }
+
     return Math.max(0, Math.min(100, Math.round(total)));
   }
 
@@ -424,6 +443,12 @@ export class MetricsCollector {
         return this.timeAt50Percent;
       case 'maxPowerRate':
         return this.maxPowerRate;
+      case 'maxPressure':
+        return this.maxPressure;
+      case 'minPressure':
+        return this.minPressure;
+      case 'finalPressure':
+        return this.lastState?.Ppzr ?? 15.5;
       case 'rodWithdrawalRate':
         // Calculate net withdrawal rate (first position → last position) over time
         // This avoids penalizing many small slider adjustments

@@ -28,6 +28,9 @@ import { boronControlScenario } from './scenarios/boron-control';
 import { xenonDynamicsScenario } from './scenarios/xenon-dynamics';
 import { powerAscensionScenario } from './scenarios/power-ascension';
 import { rpsScenario } from './scenarios/rps-demonstration';
+import { pressurizerOpsScenario } from './scenarios/pressurizer-ops';
+import { steamDumpScenario } from './scenarios/steam-dump';
+import { secondaryIntegratedScenario } from './scenarios/secondary-integrated';
 import type { TrainingScenario } from './types';
 
 /**
@@ -49,6 +52,10 @@ export const SCENARIOS: TrainingScenario[] = [
   powerManeuveringScenario,
   powerAscensionScenario,
   xenonDynamicsScenario,
+  // Tier 2b — Secondary & Pressure Control
+  pressurizerOpsScenario,
+  steamDumpScenario,
+  secondaryIntegratedScenario,
   // Tier 3 — Protection & Emergency
   rpsScenario,
   pumpTripScenario,

@@ -33,12 +33,17 @@ export const powerAscensionScenario: TrainingScenario = {
       I135: 1e14,
       Xe135: 1e14,
       decayHeat: [0.003, 0.002, 0.001],
+      Ppzr: 15.5,
     },
     controls: {
       rod: 0.40,
       pumpOn: true,
       scram: false,
       boronConc: 600, // Moderate boron — will need to dilute during ascension
+      pressurizerHeater: 0,
+      pressurizerSpray: 0,
+      steamDump: 0,
+      feedwaterFlow: 1,
     },
     timeAcceleration: 3,
   },

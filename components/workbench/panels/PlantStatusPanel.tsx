@@ -17,6 +17,7 @@ interface PlantStatusPanelProps {
   boronActual: number;
   pumpOn: boolean;
   decayHeatPct: number;
+  pressure: number;
   simTime: number;
   history: HistoryPoint[];
   learningMode?: boolean;
@@ -30,6 +31,7 @@ export default function PlantStatusPanel({
   boronActual,
   pumpOn,
   decayHeatPct,
+  pressure,
   simTime,
   history,
   learningMode = false,
@@ -44,6 +46,10 @@ export default function PlantStatusPanel({
   );
   const tcHistory = useMemo(
     () => history.slice(-60).map((h) => ({ value: h.Tc })),
+    [history]
+  );
+  const pzrHistory = useMemo(
+    () => history.slice(-60).map((h) => ({ value: h.Ppzr })),
     [history]
   );
 
@@ -129,6 +135,35 @@ export default function PlantStatusPanel({
           dangerLevel={620}
           min={293}
           max={650}
+        />
+      </GlassPanel>
+
+      {/* RCS Pressure */}
+      <GlassPanel variant="dark">
+        <div style={gaugeRow}>
+          <div style={{ flex: 1 }}>
+            <ParameterGauge
+              label="RCS PRESSURE"
+              value={pressure}
+              unit="MPa"
+              min={8}
+              max={18}
+              warningLow={13.0}
+              dangerLow={12.0}
+              warningHigh={16.0}
+              dangerHigh={16.5}
+              format={(v) => v.toFixed(2)}
+            />
+          </div>
+          <LearningTooltip visible={learningMode} title={STATUS_HELP.pressure.title} description={STATUS_HELP.pressure.description} position="left" />
+        </div>
+        <SparklineTrend
+          data={pzrHistory}
+          color="#8b5cf6"
+          warningLevel={16.0}
+          dangerLevel={16.5}
+          min={8}
+          max={18}
         />
       </GlassPanel>
 

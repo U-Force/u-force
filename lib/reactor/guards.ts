@@ -129,6 +129,11 @@ export function validateControls(controls: ControlInputs): void {
       `Boron concentration must be non-negative, got: ${controls.boronConc}`
     );
   }
+
+  assertInRange(controls.pressurizerHeater, 0, 1, 'Pressurizer heater');
+  assertInRange(controls.pressurizerSpray, 0, 1, 'Pressurizer spray');
+  assertInRange(controls.steamDump, 0, 1, 'Steam dump');
+  assertInRange(controls.feedwaterFlow, 0, 1, 'Feedwater flow');
 }
 
 /**
@@ -279,7 +284,7 @@ export function clampState(
   state: ReactorState,
   params: ReactorParams,
   config?: SimulationConfig
-): { P: boolean; Tf: boolean; Tc: boolean; C: boolean[] } {
+): { P: boolean; Tf: boolean; Tc: boolean; Ppzr: boolean; C: boolean[] } {
   const warn = config?.warnOnClamp 
     ? (config.warnHandler ?? console.warn) 
     : () => {};
@@ -288,6 +293,7 @@ export function clampState(
     P: false,
     Tf: false,
     Tc: false,
+    Ppzr: false,
     C: state.C.map(() => false),
   };
   
@@ -324,6 +330,17 @@ export function clampState(
     state.Tc = tcResult.value;
   }
   
+  // Clamp pressurizer pressure
+  const ppzrResult = clampWithInfo(state.Ppzr, params.pzrPressureMin, params.pzrPressureMax);
+  if (ppzrResult.clamped) {
+    result.Ppzr = true;
+    warn(
+      `[t=${state.t.toFixed(3)}s] Pressurizer pressure clamped from ${ppzrResult.original.toFixed(2)} MPa ` +
+      `to ${ppzrResult.bound} bound ${ppzrResult.value} MPa`
+    );
+    state.Ppzr = ppzrResult.value;
+  }
+
   // Clamp precursor concentrations (must be non-negative)
   for (let i = 0; i < state.C.length; i++) {
     if (state.C[i] < 0) {

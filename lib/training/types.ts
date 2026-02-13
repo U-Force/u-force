@@ -80,7 +80,7 @@ export interface AssessmentCriterion {
 
 export interface ScenarioEvent {
   triggerTime: number; // seconds from start
-  type: 'pump_trip' | 'parameter_drift' | 'rod_drop' | 'alarm';
+  type: 'pump_trip' | 'parameter_drift' | 'rod_drop' | 'alarm' | 'feedwater_loss';
   parameters: Record<string, any>;
   description: string;
 }
