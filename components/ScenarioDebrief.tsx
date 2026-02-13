@@ -155,13 +155,13 @@ export default function ScenarioDebrief({
       const pressureTrip = metrics.feedback.some(f => f.includes('trip'));
       if (pressureTrip && metrics.tripCount > 0) {
         items.push('A pressure excursion caused a reactor trip. Start corrective action earlier — spray and heaters take time to respond.');
-        rating = 'poor';
+        rating = downgrade(rating, 'poor');
         pressureOk = false;
       }
 
       if (pressureOk && metrics.tripCount === 0) {
         items.push('Pressure remained within safe limits — good pressurizer management.');
-        rating = 'excellent';
+        rating = upgrade(rating, 'excellent');
       }
 
       items.push('TIP: In a real PWR, pressurizer response lags temperature changes by 10-30 seconds. Always act before the parameter reaches its limit.');
@@ -177,23 +177,23 @@ export default function ScenarioDebrief({
 
     if (metrics.finalFuelTemp > 1500) {
       items.push(`Peak fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is dangerously high. UO2 melting point is ~3100 K; damage begins well below that.`);
-      rating = 'poor';
+      rating = downgrade(rating, 'poor');
     } else if (metrics.finalFuelTemp > 1000) {
       items.push(`Peak fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is elevated. Slower power changes reduce thermal stress.`);
-      rating = 'fair';
+      rating = downgrade(rating, 'fair');
     } else if (metrics.finalFuelTemp > 500) {
       items.push(`Fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is within normal operating range.`);
     }
 
     if (metrics.finalCoolantTemp > 600) {
       items.push(`Coolant temperature of ${metrics.finalCoolantTemp.toFixed(0)} K approaches boiling. Risk of departure from nucleate boiling (DNB).`);
-      rating = 'poor';
+      rating = downgrade(rating, 'poor');
     } else if (metrics.finalCoolantTemp > 580) {
       items.push(`Coolant temperature of ${metrics.finalCoolantTemp.toFixed(0)} K is above normal. Ensure adequate heat removal through feedwater and steam dump.`);
-      if (rating === 'good' || rating === 'excellent') rating = 'fair';
+      rating = downgrade(rating, 'fair');
     } else if (metrics.finalCoolantTemp > 300) {
       items.push('Coolant temperature well controlled throughout the scenario.');
-      if (rating === 'good') rating = 'excellent';
+      rating = upgrade(rating, 'excellent');
     }
 
     // Check for temperature-related objectives
@@ -219,7 +219,7 @@ export default function ScenarioDebrief({
     } else {
       if (metrics.tripCount > 0) {
         items.push(`${metrics.tripCount} reactor trip(s) occurred. Each trip subjects the plant to thermal and mechanical transients that reduce equipment life.`);
-        rating = 'poor';
+        rating = downgrade(rating, 'poor');
       }
       if (metrics.safetyLimitViolations.length > 0) {
         for (const v of metrics.safetyLimitViolations.slice(0, 3)) {
@@ -228,13 +228,13 @@ export default function ScenarioDebrief({
             v.parameter === 'coolantTemp' ? 'Coolant Temperature' : v.parameter;
           items.push(`${paramName} exceeded its limit at t=${v.timestamp.toFixed(0)}s. Monitor trend indicators to catch rising parameters before they reach trip setpoints.`);
         }
-        if (rating !== 'poor') rating = 'poor';
+        rating = downgrade(rating, 'poor');
       }
     }
 
     if (metrics.scramCount > 0) {
       items.push(`SCRAM was initiated ${metrics.scramCount} time(s). While SCRAM is the correct response to an emergency, the goal is to prevent the emergency in the first place.`);
-      if (rating === 'excellent') rating = 'fair';
+      rating = downgrade(rating, 'fair');
     }
 
     items.push(metrics.tripCount === 0
