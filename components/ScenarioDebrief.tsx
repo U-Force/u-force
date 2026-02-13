@@ -40,6 +40,263 @@ export default function ScenarioDebrief({
   const scoreColor = getScoreColor(metrics.score);
   const scoreGrade = getScoreGrade(metrics.score);
 
+  // ── Structured Instructor Analysis ──
+  interface FeedbackCategory {
+    title: string;
+    rating: 'excellent' | 'good' | 'fair' | 'poor';
+    points: string[];
+  }
+
+  const analysisCategories: FeedbackCategory[] = [];
+
+  // Rating priority: excellent > good > fair > poor
+  const RATING_ORDER: FeedbackCategory['rating'][] = ['excellent', 'good', 'fair', 'poor'];
+  /** Downgrade rating: only goes worse, never improves */
+  function downgrade(current: FeedbackCategory['rating'], to: FeedbackCategory['rating']): FeedbackCategory['rating'] {
+    return RATING_ORDER.indexOf(to) > RATING_ORDER.indexOf(current) ? to : current;
+  }
+  /** Upgrade rating: only goes better, never worsens */
+  function upgrade(current: FeedbackCategory['rating'], to: FeedbackCategory['rating']): FeedbackCategory['rating'] {
+    return RATING_ORDER.indexOf(to) < RATING_ORDER.indexOf(current) ? to : current;
+  }
+
+  // 1. Reactor Operations
+  {
+    const items: string[] = [];
+    let rating: FeedbackCategory['rating'] = 'good';
+    const finalPowerPct = metrics.finalPower * 100;
+
+    if (metrics.rodMovements.length === 0) {
+      items.push('No rod movements were recorded — did you use the control rods?');
+      rating = downgrade(rating, 'poor');
+    } else if (metrics.rodMovements.length <= 5) {
+      items.push('Minimal rod adjustments — controlled and deliberate approach.');
+    } else if (metrics.rodMovements.length <= 20) {
+      items.push(`${metrics.rodMovements.length} rod adjustments made. Consider smoother, fewer movements for steadier control.`);
+    } else {
+      items.push(`${metrics.rodMovements.length} rod adjustments is excessive. Frequent hunting causes power oscillations.`);
+      rating = downgrade(rating, 'fair');
+    }
+
+    if (metrics.timeToFirstAction > 0 && metrics.timeToFirstAction <= 10) {
+      items.push(`Quick initial response at ${metrics.timeToFirstAction.toFixed(1)}s — good situational awareness.`);
+    } else if (metrics.timeToFirstAction > 30) {
+      items.push(`Response time of ${metrics.timeToFirstAction.toFixed(1)}s is slow. In a real plant, delays increase transient severity.`);
+      rating = downgrade(rating, 'fair');
+    }
+
+    // Check scenario-specific power targets
+    const hasPowerObjective = scenario.objectives.some(o =>
+      o.assessmentCriteria.some(c => c.metric === 'finalPower')
+    );
+    if (hasPowerObjective) {
+      const powerCriteria = scenario.objectives
+        .flatMap(o => o.assessmentCriteria)
+        .find(c => c.metric === 'finalPower');
+      if (powerCriteria) {
+        if (powerCriteria.target.includes('-')) {
+          const [lo, hi] = powerCriteria.target.split('-').map(Number);
+          if (finalPowerPct >= lo && finalPowerPct <= hi) {
+            items.push(`Final power of ${finalPowerPct.toFixed(1)}% is within the ${lo}-${hi}% target — well done.`);
+            rating = upgrade(rating, 'excellent');
+          } else {
+            items.push(`Final power of ${finalPowerPct.toFixed(1)}% missed the ${lo}-${hi}% target. Aim for gradual rod withdrawal with time to stabilize.`);
+            rating = downgrade(rating, 'fair');
+          }
+        } else if (powerCriteria.target.startsWith('<')) {
+          const limit = Number(powerCriteria.target.slice(1));
+          if (finalPowerPct < limit) {
+            items.push(`Power kept below ${limit}% target.`);
+          } else {
+            items.push(`Power exceeded ${limit}% target — insert rods earlier to prevent overshoot.`);
+            rating = downgrade(rating, 'fair');
+          }
+        }
+      }
+    }
+
+    if (items.length > 0) {
+      analysisCategories.push({ title: 'Reactor Operations', rating, points: items });
+    }
+  }
+
+  // 2. Pressure Management (if scenario involves pressure)
+  {
+    const hasPressureObj = scenario.objectives.some(o =>
+      o.assessmentCriteria.some(c => ['maxPressure', 'minPressure', 'finalPressure'].includes(c.metric))
+    );
+    if (hasPressureObj) {
+      const items: string[] = [];
+      let rating: FeedbackCategory['rating'] = 'good';
+
+      // We don't have heater/spray action counts in metrics, but we can infer from pressure behavior
+      const pressureCriteria = scenario.objectives
+        .flatMap(o => o.assessmentCriteria)
+        .filter(c => ['maxPressure', 'minPressure', 'finalPressure'].includes(c.metric));
+
+      let pressureOk = true;
+      for (const crit of pressureCriteria) {
+        if (crit.metric === 'finalPressure' && crit.target.includes('-')) {
+          const [lo, hi] = crit.target.split('-').map(Number);
+          // We can't directly see finalPressure here, but we know from metrics.feedback
+          items.push(`Target pressure band: ${lo}-${hi} MPa. Use spray when pressure rises above ${((lo + hi) / 2 + 0.3).toFixed(1)} MPa and heaters when it drops below ${((lo + hi) / 2 - 0.3).toFixed(1)} MPa.`);
+        }
+        if (crit.metric === 'maxPressure' && crit.target.startsWith('<')) {
+          const limit = Number(crit.target.slice(1));
+          items.push(`Maximum pressure must stay below ${limit} MPa. Anticipate pressure rises during power increases and apply spray proactively.`);
+        }
+        if (crit.metric === 'minPressure' && crit.target.startsWith('>')) {
+          const limit = Number(crit.target.slice(1));
+          items.push(`Minimum pressure must stay above ${limit} MPa. Cooldowns cause pressure to drop — use heaters to maintain the steam bubble.`);
+        }
+      }
+
+      // Check if a pressure trip happened
+      const pressureTrip = metrics.feedback.some(f => f.includes('trip'));
+      if (pressureTrip && metrics.tripCount > 0) {
+        items.push('A pressure excursion caused a reactor trip. Start corrective action earlier — spray and heaters take time to respond.');
+        rating = 'poor';
+        pressureOk = false;
+      }
+
+      if (pressureOk && metrics.tripCount === 0) {
+        items.push('Pressure remained within safe limits — good pressurizer management.');
+        rating = 'excellent';
+      }
+
+      items.push('TIP: In a real PWR, pressurizer response lags temperature changes by 10-30 seconds. Always act before the parameter reaches its limit.');
+
+      analysisCategories.push({ title: 'Pressure Management', rating, points: items });
+    }
+  }
+
+  // 3. Thermal Performance
+  {
+    const items: string[] = [];
+    let rating: FeedbackCategory['rating'] = 'good';
+
+    if (metrics.finalFuelTemp > 1500) {
+      items.push(`Peak fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is dangerously high. UO2 melting point is ~3100 K; damage begins well below that.`);
+      rating = 'poor';
+    } else if (metrics.finalFuelTemp > 1000) {
+      items.push(`Peak fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is elevated. Slower power changes reduce thermal stress.`);
+      rating = 'fair';
+    } else if (metrics.finalFuelTemp > 500) {
+      items.push(`Fuel temperature of ${metrics.finalFuelTemp.toFixed(0)} K is within normal operating range.`);
+    }
+
+    if (metrics.finalCoolantTemp > 600) {
+      items.push(`Coolant temperature of ${metrics.finalCoolantTemp.toFixed(0)} K approaches boiling. Risk of departure from nucleate boiling (DNB).`);
+      rating = 'poor';
+    } else if (metrics.finalCoolantTemp > 580) {
+      items.push(`Coolant temperature of ${metrics.finalCoolantTemp.toFixed(0)} K is above normal. Ensure adequate heat removal through feedwater and steam dump.`);
+      if (rating === 'good' || rating === 'excellent') rating = 'fair';
+    } else if (metrics.finalCoolantTemp > 300) {
+      items.push('Coolant temperature well controlled throughout the scenario.');
+      if (rating === 'good') rating = 'excellent';
+    }
+
+    // Check for temperature-related objectives
+    const hasTempObj = scenario.objectives.some(o =>
+      o.assessmentCriteria.some(c => c.metric === 'maxFuelTemp' || c.metric === 'maxCoolantTemp')
+    );
+    if (hasTempObj) {
+      items.push('TIP: Negative temperature feedback (Doppler effect) is your ally — it naturally limits power excursions. But it works best when you give it time to act.');
+    }
+
+    if (items.length > 0) {
+      analysisCategories.push({ title: 'Thermal Performance', rating, points: items });
+    }
+  }
+
+  // 4. Safety Awareness
+  {
+    const items: string[] = [];
+    let rating: FeedbackCategory['rating'] = 'excellent';
+
+    if (metrics.tripCount === 0 && metrics.safetyLimitViolations.length === 0) {
+      items.push('No trips or safety violations — excellent safety awareness.');
+    } else {
+      if (metrics.tripCount > 0) {
+        items.push(`${metrics.tripCount} reactor trip(s) occurred. Each trip subjects the plant to thermal and mechanical transients that reduce equipment life.`);
+        rating = 'poor';
+      }
+      if (metrics.safetyLimitViolations.length > 0) {
+        for (const v of metrics.safetyLimitViolations.slice(0, 3)) {
+          const paramName = v.parameter === 'power' ? 'Reactor Power' :
+            v.parameter === 'fuelTemp' ? 'Fuel Temperature' :
+            v.parameter === 'coolantTemp' ? 'Coolant Temperature' : v.parameter;
+          items.push(`${paramName} exceeded its limit at t=${v.timestamp.toFixed(0)}s. Monitor trend indicators to catch rising parameters before they reach trip setpoints.`);
+        }
+        if (rating !== 'poor') rating = 'poor';
+      }
+    }
+
+    if (metrics.scramCount > 0) {
+      items.push(`SCRAM was initiated ${metrics.scramCount} time(s). While SCRAM is the correct response to an emergency, the goal is to prevent the emergency in the first place.`);
+      if (rating === 'excellent') rating = 'fair';
+    }
+
+    items.push(metrics.tripCount === 0
+      ? 'Continue practicing to maintain this level of safety discipline.'
+      : 'RECOMMENDATION: Practice this scenario at a slower time acceleration and focus on monitoring trends before they become alarms.');
+
+    analysisCategories.push({ title: 'Safety Awareness', rating, points: items });
+  }
+
+  // 5. Recommendations
+  {
+    const items: string[] = [];
+
+    if (!metrics.success) {
+      items.push('Retry this scenario — focus on the failed objectives and apply the feedback above.');
+    }
+
+    if (metrics.score >= 90) {
+      items.push('Outstanding performance. Consider advancing to higher-difficulty scenarios.');
+    } else if (metrics.score >= 70) {
+      items.push('Solid performance with room for refinement. Try again to achieve 90+.');
+    } else if (metrics.score >= 45) {
+      items.push('Review the briefing carefully before your next attempt. Focus on one objective at a time.');
+    } else {
+      items.push('Start with the scenario briefing and hints. Consider practicing individual controls in Free Play mode before retrying.');
+    }
+
+    // Scenario-specific tips
+    if (scenario.id.includes('PZR')) {
+      items.push('Practice adjusting heaters and spray in Free Play mode to build muscle memory for pressure control.');
+    }
+    if (scenario.id.includes('STEAMDUMP')) {
+      items.push('Remember: open dump valves first, then insert rods. Closing dump valves too early causes temperature spikes.');
+    }
+    if (scenario.id.includes('SECONDARY')) {
+      items.push('Multi-system coordination improves with repetition. Try managing just pressure first, then add steam dump timing.');
+    }
+    if (scenario.id.includes('FEEDWATER') || scenario.id.includes('FW')) {
+      items.push('Loss of feedwater is time-critical. Practice recognizing the temperature trend and initiating power reduction within 15 seconds.');
+    }
+
+    analysisCategories.push({ title: 'Next Steps', rating: metrics.score >= 70 ? 'good' : 'fair', points: items });
+  }
+
+  const getRatingColor = (rating: FeedbackCategory['rating']): string => {
+    switch (rating) {
+      case 'excellent': return COLORS.emerald;
+      case 'good': return COLORS.blue;
+      case 'fair': return COLORS.amber;
+      case 'poor': return COLORS.red;
+    }
+  };
+
+  const getRatingLabel = (rating: FeedbackCategory['rating']): string => {
+    switch (rating) {
+      case 'excellent': return 'EXCELLENT';
+      case 'good': return 'GOOD';
+      case 'fair': return 'NEEDS WORK';
+      case 'poor': return 'CRITICAL';
+    }
+  };
+
   // Derive what went right and wrong
   const rightItems: string[] = [];
   const wrongItems: string[] = [];
@@ -224,6 +481,42 @@ export default function ScenarioDebrief({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* ── Instructor Analysis ── */}
+            <div style={section}>
+              <div style={sectionTitle}>INSTRUCTOR ANALYSIS</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {analysisCategories.map((cat, i) => {
+                  const rColor = getRatingColor(cat.rating);
+                  return (
+                    <div key={i} style={analysisCategoryCard}>
+                      <div style={analysisCategoryHeader}>
+                        <span style={analysisCategoryTitle}>{cat.title}</span>
+                        <span style={analysisCategoryBadge(rColor)}>
+                          {getRatingLabel(cat.rating)}
+                        </span>
+                      </div>
+                      <div style={analysisCategoryBar}>
+                        <div style={analysisCategoryBarFill(rColor, cat.rating)} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                        {cat.points.map((point, j) => {
+                          const isTip = point.startsWith('TIP:') || point.startsWith('RECOMMENDATION:');
+                          return (
+                            <div key={j} style={analysisPoint(isTip)}>
+                              <span style={analysisPointDot(isTip ? COLORS.blue : rColor)}>
+                                {isTip ? '>' : '-'}
+                              </span>
+                              <span>{point}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* ── Performance Metrics Grid ── */}
@@ -936,3 +1229,71 @@ const btnRetry: React.CSSProperties = {
   color: '#000',
   border: 'none',
 };
+
+// ── Instructor Analysis ──
+
+const analysisCategoryCard: React.CSSProperties = {
+  padding: '14px 16px',
+  background: COLORS.bgMedium,
+  border: `1px solid ${COLORS.borderSubtle}`,
+  borderRadius: RADIUS.lg,
+};
+
+const analysisCategoryHeader: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: '8px',
+};
+
+const analysisCategoryTitle: React.CSSProperties = {
+  fontSize: FONT_SIZES.md,
+  fontWeight: 700,
+  color: COLORS.white,
+  letterSpacing: '0.3px',
+};
+
+const analysisCategoryBadge = (color: string): React.CSSProperties => ({
+  fontSize: '8px',
+  fontWeight: 700,
+  letterSpacing: '1px',
+  padding: '2px 8px',
+  borderRadius: RADIUS.sm,
+  color,
+  background: `${color}18`,
+  border: `1px solid ${color}40`,
+});
+
+const analysisCategoryBar: React.CSSProperties = {
+  height: '4px',
+  background: 'rgba(255,255,255,0.06)',
+  borderRadius: '2px',
+  overflow: 'hidden',
+};
+
+const analysisCategoryBarFill = (color: string, rating: string): React.CSSProperties => ({
+  height: '100%',
+  width: rating === 'excellent' ? '100%' : rating === 'good' ? '75%' : rating === 'fair' ? '45%' : '20%',
+  background: color,
+  borderRadius: '2px',
+  transition: 'width 0.6s ease-out',
+  boxShadow: `0 0 6px ${color}40`,
+});
+
+const analysisPoint = (isTip: boolean): React.CSSProperties => ({
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '8px',
+  fontSize: FONT_SIZES.sm,
+  color: isTip ? COLORS.blue : COLORS.slateLight,
+  lineHeight: 1.6,
+  fontStyle: isTip ? 'italic' : 'normal',
+});
+
+const analysisPointDot = (color: string): React.CSSProperties => ({
+  color,
+  fontWeight: 700,
+  flexShrink: 0,
+  marginTop: '1px',
+  fontFamily: FONTS.mono,
+});
